@@ -5,6 +5,10 @@ on:
     branches: ['master']
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  VITE_CHAT_API_URL: https://cyber-shield-chat-proxy.youlianvr.workers.dev/api/chat
+
 permissions:
   contents: read
   pages: write
