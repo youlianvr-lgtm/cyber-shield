@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-top: #f2e6d6;
+  --bg-bottom: #eef3eb;
+  --surface: rgba(255, 255, 255, 0.78);
+  --ink-strong: #17324a;
+  --ink-soft: #556779;
+  --accent: #c94d21;
+  --accent-strong: #8f3417;
+  --success: #145f55;
+  --shadow: 0 20px 40px rgba(23, 50, 74, 0.08);
+
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background:
+    radial-gradient(circle at top left, rgba(255, 174, 94, 0.28), transparent 26%),
+    radial-gradient(circle at top right, rgba(20, 95, 85, 0.16), transparent 22%),
+    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-padding-top: 24px;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+textarea:focus,
+select:focus,
+button:focus,
+a:focus {
+  outline: 3px solid rgba(20, 95, 85, 0.2);
+  outline-offset: 2px;
+}
+
+code {
+  font-family: 'IBM Plex Mono', Consolas, monospace;
+  font-size: 0.92em;
+}
+
+h1,
+h2,
+h3,
+strong {
+  color: var(--ink-strong);
+}
+
+h1 {
+  font-size: clamp(2.9rem, 7vw, 5.2rem);
+  line-height: 0.94;
+  letter-spacing: -0.05em;
+}
+
+h2 {
+  font-size: clamp(1.8rem, 3.8vw, 2.7rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+h3 {
+  font-size: clamp(1.2rem, 2.3vw, 1.55rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+p {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}

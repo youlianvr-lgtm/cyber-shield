@@ -1,0 +1,10 @@
+name = "cyber-shield-chat-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-04-10"
+
+[vars]
+ALLOWED_ORIGIN = "https://youlianvr-lgtm.github.io"
+GROQ_MODEL = "llama-3.1-8b-instant"
+
+[observability.logs]
+enabled = true
