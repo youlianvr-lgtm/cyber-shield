@@ -529,8 +529,16 @@
   gap: 18px;
 }
 
-.panel-footer p {
-  max-width: 62ch;
+.contact-list {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.contact-list a {
+  color: var(--ink-strong);
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-weight: 700;
 }
 
 @media (max-width: 1080px) {
