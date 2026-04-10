@@ -458,6 +458,43 @@
   gap: 10px;
 }
 
+.verdict-card,
+.code-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(19, 46, 72, 0.1);
+  background: rgba(246, 247, 242, 0.94);
+}
+
+.verdict-card--safe {
+  border-color: rgba(20, 95, 85, 0.18);
+  background: rgba(231, 245, 239, 0.92);
+}
+
+.verdict-card--risk {
+  border-color: rgba(206, 83, 35, 0.18);
+  background: rgba(255, 239, 231, 0.92);
+}
+
+.verdict-card strong,
+.code-card strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.code-card span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.code-card strong {
+  font-size: 1.9rem;
+  font-family: 'IBM Plex Mono', Consolas, monospace;
+  letter-spacing: 0.18em;
+}
+
 .chat-form {
   display: grid;
   gap: 12px;

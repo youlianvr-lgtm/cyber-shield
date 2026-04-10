@@ -19,6 +19,10 @@ const initialInsight: ChatInsight = {
     'Живой разбор появится после первого ответа ИИ. Ваша задача — не соглашаться автоматически и не раскрывать реальные данные.',
   riskLevel: 'medium',
   conversationEnded: false,
+  userVerdict: 'После ответа появится короткий вердикт: безопасно ли вы среагировали.',
+  userWasSafe: null,
+  mistakeTag: null,
+  simulatedCode: null,
 }
 
 const initialChatMessages = (): ChatMessage[] => [
@@ -63,6 +67,60 @@ const buildMistakeCounts = (
 const getScenarioById = (scenarioId: string) =>
   scenarios.find((scenario) => scenario.id === scenarioId) ?? scenarios[0]
 
+const safeReplyPatterns = [
+  /не\s+(буду|стану|собираюсь)\s+(говорить|диктовать|сообщать|называть|отправлять|вводить)/i,
+  /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/i,
+  /сам\s+(перезвоню|позвоню|проверю)/i,
+  /проверю\s+(в|через|по)/i,
+  /не\s+перейду\s+по\s+ссылке/i,
+  /не\s+буду\s+переводить/i,
+  /заверш(у|ить)\s+(звонок|разговор|диалог)/i,
+  /отказываюсь/i,
+  /откажусь/i,
+]
+
+const riskyReplyPatterns = [
+  {
+    pattern: /(скажу|назову|сообщу|продиктую|отправлю|введу).{0,24}(код|смс|парол|данн)/i,
+    mistakeTag: 'код-подтверждения',
+  },
+  {
+    pattern: /(переведу|отправлю).{0,24}(деньг|сумм|оплат)/i,
+    mistakeTag: 'перевод-денег',
+  },
+  {
+    pattern: /(перейду|открою).{0,24}(ссылк|сайт)/i,
+    mistakeTag: 'переход-по-ссылке',
+  },
+  {
+    pattern: /(сообщу|скажу|отправлю|введу).{0,24}(карт|cvv|паспорт|данн)/i,
+    mistakeTag: 'передача-данных',
+  },
+]
+
+const evaluateReplyLocally = (message: string) => {
+  if (safeReplyPatterns.some((pattern) => pattern.test(message))) {
+    return {
+      userWasSafe: true,
+      userVerdict:
+        'Да, это безопасная реакция: вы не поддались давлению и перевели проверку в независимый канал.',
+      mistakeTag: null,
+    }
+  }
+
+  const riskyMatch = riskyReplyPatterns.find(({ pattern }) => pattern.test(message))
+  if (riskyMatch) {
+    return {
+      userWasSafe: false,
+      userVerdict:
+        'Нет, это рискованный ответ: вы начинаете играть по правилам мошенника вместо проверки источника.',
+      mistakeTag: riskyMatch.mistakeTag,
+    }
+  }
+
+  return null
+}
+
 const isChatApiResponse = (value: unknown): value is ChatApiResponse => {
   if (!value || typeof value !== 'object') {
     return false
@@ -74,7 +132,11 @@ const isChatApiResponse = (value: unknown): value is ChatApiResponse => {
     Array.isArray(response.redFlags) &&
     typeof response.coachNote === 'string' &&
     typeof response.riskLevel === 'string' &&
-    typeof response.conversationEnded === 'boolean'
+    typeof response.conversationEnded === 'boolean' &&
+    typeof response.userVerdict === 'string' &&
+    typeof response.userWasSafe === 'boolean' &&
+    (typeof response.mistakeTag === 'string' || response.mistakeTag === null) &&
+    (typeof response.simulatedCode === 'string' || response.simulatedCode === null)
   )
 }
 
@@ -232,6 +294,10 @@ function App() {
       if (!isChatApiResponse(data)) {
         throw new Error('invalid-payload')
       }
+      const localEvaluation = evaluateReplyLocally(trimmed)
+      const resolvedUserWasSafe = localEvaluation?.userWasSafe ?? data.userWasSafe
+      const resolvedUserVerdict = localEvaluation?.userVerdict ?? data.userVerdict
+      const resolvedMistakeTag = localEvaluation?.mistakeTag ?? data.mistakeTag
 
       setChatMessages((previous) => [
         ...previous,
@@ -246,14 +312,23 @@ function App() {
         coachNote: data.coachNote,
         riskLevel: data.riskLevel,
         conversationEnded: data.conversationEnded,
+        userVerdict: resolvedUserVerdict,
+        userWasSafe: resolvedUserWasSafe,
+        mistakeTag: resolvedMistakeTag,
+        simulatedCode: data.simulatedCode,
       })
 
+      setProgress((previous) => ({
+        ...previous,
+        chatSessionsCount: previous.chatSessionsCount + (chatSessionCounted ? 0 : 1),
+        mistakeTagsCount:
+          resolvedUserWasSafe || !resolvedMistakeTag
+            ? previous.mistakeTagsCount
+            : buildMistakeCounts(previous.mistakeTagsCount, [resolvedMistakeTag]),
+        lastVisitedAt: new Date().toISOString(),
+      }))
+
       if (!chatSessionCounted) {
-        setProgress((previous) => ({
-          ...previous,
-          chatSessionsCount: previous.chatSessionsCount + 1,
-          lastVisitedAt: new Date().toISOString(),
-        }))
         setChatSessionCounted(true)
       }
     } catch {
@@ -271,6 +346,12 @@ function App() {
       : chatInsight.riskLevel === 'medium'
         ? 'Средний риск'
         : 'Низкий риск'
+  const verdictTone =
+    chatInsight.userWasSafe === null
+      ? 'verdict-card'
+      : chatInsight.userWasSafe
+        ? 'verdict-card verdict-card--safe'
+        : 'verdict-card verdict-card--risk'
 
   return (
     <div className="app-shell">
@@ -550,6 +631,30 @@ function App() {
                 <h3>Разбор</h3>
                 <p>{chatInsight.coachNote}</p>
               </div>
+
+              <div className="coach-section">
+                <h3>Оценка вашего ответа</h3>
+                <div className={verdictTone}>
+                  <strong>
+                    {chatInsight.userWasSafe === null
+                      ? 'Пока без оценки'
+                      : chatInsight.userWasSafe
+                        ? 'Ответ безопасный'
+                        : 'Засчитана ошибка'}
+                  </strong>
+                  <p>{chatInsight.userVerdict}</p>
+                </div>
+              </div>
+
+              {chatInsight.simulatedCode ? (
+                <div className="coach-section">
+                  <h3>Код из сообщения</h3>
+                  <div className="code-card">
+                    <span>Учебный код для этой сцены</span>
+                    <strong>{chatInsight.simulatedCode}</strong>
+                  </div>
+                </div>
+              ) : null}
 
               {chatInsight.conversationEnded ? (
                 <div className="chat-banner">

@@ -63,6 +63,10 @@ export type ChatInsight = {
   coachNote: string
   riskLevel: DangerLevel
   conversationEnded: boolean
+  userVerdict: string
+  userWasSafe: boolean | null
+  mistakeTag: string | null
+  simulatedCode: string | null
 }
 
 export type ChatApiRequest = {
@@ -79,4 +83,8 @@ export type ChatApiResponse = {
   coachNote: string
   riskLevel: DangerLevel
   conversationEnded: boolean
+  userVerdict: string
+  userWasSafe: boolean
+  mistakeTag: string | null
+  simulatedCode: string | null
 }
