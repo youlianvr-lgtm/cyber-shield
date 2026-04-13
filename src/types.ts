@@ -84,7 +84,7 @@ export type ChatApiResponse = {
   riskLevel: DangerLevel
   conversationEnded: boolean
   userVerdict: string
-  userWasSafe: boolean
+  userWasSafe: boolean | null
   mistakeTag: string | null
   simulatedCode: string | null
 }

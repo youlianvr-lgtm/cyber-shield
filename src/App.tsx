@@ -14,12 +14,12 @@ import type {
 } from './types'
 
 const initialInsight: ChatInsight = {
-  redFlags: ['Незнакомый контакт', 'Попытка вызвать срочность', 'Сбор чувствительной информации'],
+  redFlags: ['Неожиданный контакт', 'Давление срочностью', 'Попытка получить данные'],
   coachNote:
-    'Живой разбор появится после первого ответа ИИ. Ваша задача — не соглашаться автоматически и не раскрывать реальные данные.',
+    'После ответа появится короткий разбор. Цель: вовремя распознать манипуляцию и спокойно прервать сценарий мошенника.',
   riskLevel: 'medium',
   conversationEnded: false,
-  userVerdict: 'После ответа появится короткий вердикт: безопасно ли вы среагировали.',
+  userVerdict: 'Оценка появится после первой вашей реплики.',
   userWasSafe: null,
   mistakeTag: null,
   simulatedCode: null,
@@ -30,7 +30,7 @@ const initialChatMessages = (): ChatMessage[] => [
     id: crypto.randomUUID(),
     role: 'assistant',
     content:
-      'Здравствуйте. Фиксирую попытку подозрительного списания с вашего счета. Если это не вы, нужно срочно подтвердить отмену операции, иначе платеж уйдет в обработку.',
+      'Здравствуйте. По вашему счету замечена подозрительная операция. Нужно подтвердить отмену прямо сейчас, иначе платеж уйдет.',
   },
 ]
 
@@ -67,6 +67,8 @@ const buildMistakeCounts = (
 const getScenarioById = (scenarioId: string) =>
   scenarios.find((scenario) => scenario.id === scenarioId) ?? scenarios[0]
 
+const normalizeMessage = (message: string) => message.toLowerCase().replace(/\s+/g, ' ').trim()
+
 const safeReplyPatterns = [
   /не\s+(буду|стану|собираюсь)\s+(говорить|диктовать|сообщать|называть|отправлять|вводить)/i,
   /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/i,
@@ -75,17 +77,26 @@ const safeReplyPatterns = [
   /не\s+перейду\s+по\s+ссылке/i,
   /не\s+буду\s+переводить/i,
   /заверш(у|ить)\s+(звонок|разговор|диалог)/i,
+  /прекращ(аю|у)\s+(разговор|общение)/i,
+  /блокирую\s+(номер|контакт)/i,
   /отказываюсь/i,
   /откажусь/i,
 ]
 
+const negatedRiskPatterns = [
+  /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/i,
+  /не\s+(переведу|перевожу|буду\s+переводить)/i,
+  /не\s+(перейду|открою)\s+(по\s+)?(ссылке|сайт)/i,
+  /не\s+(подтвержу|выполню|продолжу)/i,
+]
+
 const riskyReplyPatterns = [
   {
-    pattern: /(скажу|назову|сообщу|продиктую|отправлю|введу).{0,24}(код|смс|парол|данн)/i,
+    pattern: /(скажу|назову|сообщу|продиктую|отправлю|введу).{0,28}(код|смс|парол|данн)/i,
     mistakeTag: 'код-подтверждения',
   },
   {
-    pattern: /(переведу|отправлю).{0,24}(деньг|сумм|оплат)/i,
+    pattern: /(переведу|перевожу|отправлю).{0,28}(деньг|сумм|оплат)/i,
     mistakeTag: 'перевод-денег',
   },
   {
@@ -96,24 +107,43 @@ const riskyReplyPatterns = [
     pattern: /(сообщу|скажу|отправлю|введу).{0,24}(карт|cvv|паспорт|данн)/i,
     mistakeTag: 'передача-данных',
   },
+  {
+    pattern: /(подтвержу|выполню|продолжу).{0,28}(операц|шаг|инструкц)/i,
+    mistakeTag: 'доверие-сценарию',
+  },
 ]
 
 const evaluateReplyLocally = (message: string) => {
-  if (safeReplyPatterns.some((pattern) => pattern.test(message))) {
+  const normalizedMessage = normalizeMessage(message)
+
+  if (!normalizedMessage) {
+    return null
+  }
+
+  if (safeReplyPatterns.some((pattern) => pattern.test(normalizedMessage))) {
     return {
       userWasSafe: true,
       userVerdict:
-        'Да, это безопасная реакция: вы не поддались давлению и перевели проверку в независимый канал.',
+        'Безопасная реакция: вы не приняли правила мошенника и перевели проверку в независимый канал.',
       mistakeTag: null,
     }
   }
 
-  const riskyMatch = riskyReplyPatterns.find(({ pattern }) => pattern.test(message))
+  if (negatedRiskPatterns.some((pattern) => pattern.test(normalizedMessage))) {
+    return {
+      userWasSafe: true,
+      userVerdict:
+        'Ответ выглядит осторожным: вы отказываетесь от рискованных действий и сохраняете контроль над ситуацией.',
+      mistakeTag: null,
+    }
+  }
+
+  const riskyMatch = riskyReplyPatterns.find(({ pattern }) => pattern.test(normalizedMessage))
   if (riskyMatch) {
     return {
       userWasSafe: false,
       userVerdict:
-        'Нет, это рискованный ответ: вы начинаете играть по правилам мошенника вместо проверки источника.',
+        'Рискованный ответ: вы начинаете действовать по сценарию мошенника вместо независимой проверки.',
       mistakeTag: riskyMatch.mistakeTag,
     }
   }
@@ -134,7 +164,7 @@ const isChatApiResponse = (value: unknown): value is ChatApiResponse => {
     typeof response.riskLevel === 'string' &&
     typeof response.conversationEnded === 'boolean' &&
     typeof response.userVerdict === 'string' &&
-    typeof response.userWasSafe === 'boolean' &&
+    (typeof response.userWasSafe === 'boolean' || response.userWasSafe === null) &&
     (typeof response.mistakeTag === 'string' || response.mistakeTag === null) &&
     (typeof response.simulatedCode === 'string' || response.simulatedCode === null)
   )
@@ -162,9 +192,7 @@ function App() {
   const selectedScenario = getScenarioById(activeScenarioId)
   const scenarioCompleted = currentStageId === null
   const safeChoices = choiceResults.filter((item) => item.outcome === 'safe').length
-  const currentRunScore = choiceResults.length
-    ? Math.round((safeChoices / choiceResults.length) * 100)
-    : 0
+  const currentRunScore = choiceResults.length ? Math.round((safeChoices / choiceResults.length) * 100) : 0
   const topMistakes = Object.entries(progress.mistakeTagsCount)
     .sort((left, right) => right[1] - left[1])
     .slice(0, 3)
@@ -213,14 +241,13 @@ function App() {
       explanation: choice.explanation,
       coachTip: choice.coachTip,
     }
-    const finished = !choice.nextStageId
 
     startTransition(() => {
       setChoiceResults((previous) => [...previous, result])
       setCurrentStageId(choice.nextStageId ?? null)
     })
 
-    registerProgressUpdate(choice, finished)
+    registerProgressUpdate(choice, !choice.nextStageId)
   }
 
   const resetScenario = () => {
@@ -253,9 +280,7 @@ function App() {
     }
 
     if (!apiUrl) {
-      setChatError(
-        'Живой ИИ-чат пока не подключен. Укажите VITE_CHAT_API_URL и откройте страницу заново.',
-      )
+      setChatError('Живой ИИ-диалог пока не подключен. Укажите VITE_CHAT_API_URL и обновите страницу.')
       return
     }
 
@@ -279,7 +304,7 @@ function App() {
         },
         body: JSON.stringify({
           sessionId: chatSessionId,
-          history: chatMessages,
+          history: requestHistory,
           difficulty: chatDifficulty,
           scenarioHint: chatScenarioHint,
           userMessage: trimmed,
@@ -294,10 +319,15 @@ function App() {
       if (!isChatApiResponse(data)) {
         throw new Error('invalid-payload')
       }
+
       const localEvaluation = evaluateReplyLocally(trimmed)
       const resolvedUserWasSafe = localEvaluation?.userWasSafe ?? data.userWasSafe
-      const resolvedUserVerdict = localEvaluation?.userVerdict ?? data.userVerdict
       const resolvedMistakeTag = localEvaluation?.mistakeTag ?? data.mistakeTag
+      const resolvedUserVerdict =
+        localEvaluation?.userVerdict ??
+        (resolvedUserWasSafe === null
+          ? 'Ответ принят. Для точной оценки добавьте, что именно вы делаете: отказываетесь, проверяете источник или соглашаетесь.'
+          : data.userVerdict)
 
       setChatMessages((previous) => [
         ...previous,
@@ -307,6 +337,7 @@ function App() {
           content: data.assistantReply,
         },
       ])
+
       setChatInsight({
         redFlags: data.redFlags,
         coachNote: data.coachNote,
@@ -322,7 +353,7 @@ function App() {
         ...previous,
         chatSessionsCount: previous.chatSessionsCount + (chatSessionCounted ? 0 : 1),
         mistakeTagsCount:
-          resolvedUserWasSafe || !resolvedMistakeTag
+          resolvedUserWasSafe !== false || !resolvedMistakeTag
             ? previous.mistakeTagsCount
             : buildMistakeCounts(previous.mistakeTagsCount, [resolvedMistakeTag]),
         lastVisitedAt: new Date().toISOString(),
@@ -333,7 +364,7 @@ function App() {
       }
     } catch {
       setChatError(
-        'Не удалось получить ответ от прокси. Проверьте Worker, переменную VITE_CHAT_API_URL и ограничения CORS.',
+        'Не удалось получить ответ от прокси. Проверьте Worker, переменную VITE_CHAT_API_URL и настройки CORS.',
       )
     } finally {
       setIsSending(false)
@@ -346,6 +377,7 @@ function App() {
       : chatInsight.riskLevel === 'medium'
         ? 'Средний риск'
         : 'Низкий риск'
+
   const verdictTone =
     chatInsight.userWasSafe === null
       ? 'verdict-card'
@@ -355,30 +387,28 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="hero-panel">
+      <header className="hero-panel" id="overview">
         <nav className="top-nav" aria-label="Навигация по разделам">
-          <a href="#overview">О проекте</a>
-          <a href="#signals">Сигналы</a>
-          <a href="#training">Тренировки</a>
-          <a href="#chat">ИИ-чат</a>
+          <a href="#signals">Признаки</a>
+          <a href="#chat">Диалог</a>
+          <a href="#cases">Разбор ситуаций</a>
           <a href="#progress">Прогресс</a>
         </nav>
 
-        <div className="hero-copy" id="overview">
-          <div className="eyebrow">КиберПраво: твой щит в сети</div>
-          <h1>Тренажер, который учит видеть мошенника до перевода денег.</h1>
+        <div className="hero-copy">
+          <div className="eyebrow">КиберПраво: распознавание мошенничества</div>
+          <h1>Учитесь видеть мошенника до того, как он получит ваши данные.</h1>
           <p className="hero-lead">
-            Не просто советы, а практика: типовые схемы, ветвящиеся тренировки и
-            учебный ИИ-собеседник, который пытается вас обмануть и тут же показывает,
-            чем выдает себя.
+            Сайт заточен под навык распознавания: сначала признаки схем, затем живой диалог с разбором и
+            практические ситуации для закрепления.
           </p>
 
           <div className="hero-actions">
-            <a className="primary-link" href="#training">
-              Начать тренировку
+            <a className="primary-link" href="#signals">
+              Начать с признаков
             </a>
             <a className="secondary-link" href="#chat">
-              Открыть ИИ-чат
+              Перейти к диалогу
             </a>
           </div>
         </div>
@@ -387,17 +417,17 @@ function App() {
           <div className="metric-card">
             <span>Сценарии</span>
             <strong>{scenarios.length}</strong>
-            <small>реалистичных схем мошенничества</small>
+            <small>типичных мошеннических схем</small>
           </div>
           <div className="metric-card">
-            <span>Пройдено</span>
+            <span>Изучено</span>
             <strong>{progress.completedScenarioIds.length}</strong>
-            <small>сохранено в браузере пользователя</small>
+            <small>ситуаций разобрано вами</small>
           </div>
           <div className="metric-card">
-            <span>ИИ-сессии</span>
+            <span>Диалоги с ИИ</span>
             <strong>{progress.chatSessionsCount}</strong>
-            <small>живых тренировок с разбором</small>
+            <small>реплик с мгновенным разбором</small>
           </div>
         </aside>
       </header>
@@ -406,11 +436,11 @@ function App() {
         <section className="panel panel-wide" id="signals">
           <div className="section-heading">
             <div>
-              <p className="section-label">Как распознать</p>
-              <h2>Шесть сигналов, которые повторяются почти в любой схеме</h2>
+              <p className="section-label">База распознавания</p>
+              <h2>Сигналы, которые чаще всего выдают мошенника</h2>
             </div>
             <p className="section-note">
-              Эти признаки встроены и в сценарные тренировки, и в ИИ-чат.
+              Начните с этих маркеров, чтобы быстрее замечать схему в звонке, чате или письме.
             </p>
           </div>
 
@@ -425,15 +455,140 @@ function App() {
           </div>
         </section>
 
-        <section className="panel panel-wide" id="training">
+        <section className="panel panel-chat" id="chat">
           <div className="section-heading">
             <div>
-              <p className="section-label">Тренировки</p>
-              <h2>Проходите сценки так, как если бы они случились с вами сегодня</h2>
+              <p className="section-label">Практика в диалоге</p>
+              <h2>Проверяйте свои формулировки в разговоре с мошенником</h2>
             </div>
-            <p className="section-note">
-              Каждый неверный выбор попадает в личную карту ошибок.
-            </p>
+            <p className="section-note">Пишите только учебные ответы, без реальных кодов и персональных данных.</p>
+          </div>
+
+          <div className="chat-toolbar">
+            <label>
+              Сценарий
+              <select value={chatScenarioHint} onChange={(event) => setChatScenarioHint(event.target.value)}>
+                {scenarioHints.map((hint) => (
+                  <option key={hint} value={hint}>
+                    {hint}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Сложность
+              <select value={chatDifficulty} onChange={(event) => setChatDifficulty(event.target.value)}>
+                {chatDifficulties.map((difficulty) => (
+                  <option key={difficulty} value={difficulty}>
+                    {difficulty}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button className="ghost-button" onClick={resetChat} type="button">
+              Начать диалог заново
+            </button>
+          </div>
+
+          {!apiUrl ? (
+            <div className="chat-banner">
+              Укажите <code>VITE_CHAT_API_URL</code>, чтобы включить живой диалог через Cloudflare Worker.
+            </div>
+          ) : null}
+
+          {chatError ? <div className="chat-banner chat-banner--error">{chatError}</div> : null}
+
+          <div className="chat-layout">
+            <aside className="coach-panel">
+              <div className="coach-risk">
+                <span>Уровень риска</span>
+                <strong>{riskTone}</strong>
+              </div>
+
+              <div className="coach-section">
+                <h3>Что настораживает</h3>
+                <div className="red-flag-row">
+                  {chatInsight.redFlags.map((flag) => (
+                    <span className="red-flag-pill" key={flag}>
+                      {flag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="coach-section">
+                <h3>Короткий разбор</h3>
+                <p>{chatInsight.coachNote}</p>
+              </div>
+
+              <div className="coach-section">
+                <h3>Оценка реакции</h3>
+                <div className={verdictTone}>
+                  <strong>
+                    {chatInsight.userWasSafe === null
+                      ? 'Нужна более точная формулировка'
+                      : chatInsight.userWasSafe
+                        ? 'Реакция безопасная'
+                        : 'Реакция рискованная'}
+                  </strong>
+                  <p>{chatInsight.userVerdict}</p>
+                </div>
+              </div>
+
+              {chatInsight.simulatedCode ? (
+                <div className="coach-section">
+                  <h3>Учебный код</h3>
+                  <div className="code-card">
+                    <span>Пример кода, который пытаются выманить</span>
+                    <strong>{chatInsight.simulatedCode}</strong>
+                  </div>
+                </div>
+              ) : null}
+
+              {chatInsight.conversationEnded ? (
+                <div className="chat-banner">Сцена завершена. Начните новый диалог или смените сценарий.</div>
+              ) : null}
+            </aside>
+
+            <div className="chat-thread" aria-live="polite">
+              {chatMessages.map((message) => (
+                <div
+                  className={`chat-bubble ${
+                    message.role === 'assistant' ? 'chat-bubble--assistant' : 'chat-bubble--user'
+                  }`}
+                  key={message.id}
+                >
+                  <span>{message.role === 'assistant' ? 'Мошенник' : 'Вы'}</span>
+                  <p>{message.content}</p>
+                </div>
+              ))}
+
+              {isSending ? <div className="chat-thinking">ИИ анализирует ваш ответ…</div> : null}
+            </div>
+          </div>
+
+          <form className="chat-form" onSubmit={handleChatSubmit}>
+            <textarea
+              rows={3}
+              value={chatInput}
+              onChange={(event) => setChatInput(event.target.value)}
+              placeholder="Напишите, как вы бы ответили. Например: откажусь, завершу разговор, проверю через официальный канал."
+            />
+            <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
+              Отправить
+            </button>
+          </form>
+        </section>
+
+        <section className="panel panel-wide" id="cases">
+          <div className="section-heading">
+            <div>
+              <p className="section-label">Разбор ситуаций</p>
+              <h2>Выбирайте безопасные действия в реалистичных сценариях</h2>
+            </div>
+            <p className="section-note">Каждое рискованное решение попадает в личную карту уязвимостей.</p>
           </div>
 
           <div className="training-layout">
@@ -452,7 +607,7 @@ function App() {
                     <strong>{scenario.title}</strong>
                     <small>
                       {scenario.difficulty}
-                      {isCompleted ? ' · пройдено' : ''}
+                      {isCompleted ? ' · изучено' : ''}
                     </small>
                   </button>
                 )
@@ -467,7 +622,7 @@ function App() {
                   <p>{selectedScenario.intro}</p>
                 </div>
                 <button className="ghost-button" onClick={resetScenario} type="button">
-                  Начать заново
+                  Пройти заново
                 </button>
               </div>
 
@@ -482,10 +637,8 @@ function App() {
                     {result ? (
                       <>
                         <div className="message-bubble message-bubble--user">
-                          <span className="message-role">Ваш выбор</span>
-                          <p>
-                            {stage.choices.find((choice) => choice.id === result.choiceId)?.label}
-                          </p>
+                          <span className="message-role">Ваш ответ</span>
+                          <p>{stage.choices.find((choice) => choice.id === result.choiceId)?.label}</p>
                         </div>
 
                         <div
@@ -493,9 +646,7 @@ function App() {
                             result.outcome === 'safe' ? 'feedback-card--safe' : 'feedback-card--risk'
                           }`}
                         >
-                          <strong>
-                            {result.outcome === 'safe' ? 'Верное решение' : 'Рискованное решение'}
-                          </strong>
+                          <strong>{result.outcome === 'safe' ? 'Безопасное решение' : 'Рискованное решение'}</strong>
                           <p>{result.explanation}</p>
                           <span>{result.coachTip}</span>
                         </div>
@@ -531,8 +682,8 @@ function App() {
               {scenarioCompleted ? (
                 <div className="scenario-summary">
                   <div>
-                    <p className="section-label">Итог сценария</p>
-                    <h3>{currentRunScore}% точных решений</h3>
+                    <p className="section-label">Итог</p>
+                    <h3>{currentRunScore}% безопасных решений</h3>
                     <p>{selectedScenario.summary}</p>
                   </div>
                   <div className="summary-tags">
@@ -546,170 +697,39 @@ function App() {
           </div>
         </section>
 
-        <section className="panel panel-chat" id="chat">
-          <div className="section-heading">
-            <div>
-              <p className="section-label">ИИ-чат</p>
-              <h2>Слева — мошенник, справа — разбор его тактики</h2>
-            </div>
-            <p className="section-note">
-              Не используйте реальные данные: только учебные ответы и условные примеры.
-            </p>
-          </div>
-
-          <div className="chat-toolbar">
-            <label>
-              Сценарий
-              <select value={chatScenarioHint} onChange={(event) => setChatScenarioHint(event.target.value)}>
-                {scenarioHints.map((hint) => (
-                  <option key={hint} value={hint}>
-                    {hint}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Сложность
-              <select value={chatDifficulty} onChange={(event) => setChatDifficulty(event.target.value)}>
-                {chatDifficulties.map((difficulty) => (
-                  <option key={difficulty} value={difficulty}>
-                    {difficulty}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button className="ghost-button" onClick={resetChat} type="button">
-              Сбросить диалог
-            </button>
-          </div>
-
-          {!apiUrl ? (
-            <div className="chat-banner">
-              Укажите <code>VITE_CHAT_API_URL</code>, чтобы включить живой чат через Cloudflare Worker.
-            </div>
-          ) : null}
-
-          {chatError ? <div className="chat-banner chat-banner--error">{chatError}</div> : null}
-
-          <div className="chat-layout">
-            <div className="chat-thread" aria-live="polite">
-              {chatMessages.map((message) => (
-                <div
-                  className={`chat-bubble ${
-                    message.role === 'assistant' ? 'chat-bubble--assistant' : 'chat-bubble--user'
-                  }`}
-                  key={message.id}
-                >
-                  <span>{message.role === 'assistant' ? 'Мошенник' : 'Вы'}</span>
-                  <p>{message.content}</p>
-                </div>
-              ))}
-
-              {isSending ? <div className="chat-thinking">ИИ анализирует ваш ответ…</div> : null}
-            </div>
-
-            <aside className="coach-panel">
-              <div className="coach-risk">
-                <span>Уровень риска</span>
-                <strong>{riskTone}</strong>
-              </div>
-
-              <div className="coach-section">
-                <h3>Что выдает мошенника</h3>
-                <div className="red-flag-row">
-                  {chatInsight.redFlags.map((flag) => (
-                    <span className="red-flag-pill" key={flag}>
-                      {flag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="coach-section">
-                <h3>Разбор</h3>
-                <p>{chatInsight.coachNote}</p>
-              </div>
-
-              <div className="coach-section">
-                <h3>Оценка вашего ответа</h3>
-                <div className={verdictTone}>
-                  <strong>
-                    {chatInsight.userWasSafe === null
-                      ? 'Пока без оценки'
-                      : chatInsight.userWasSafe
-                        ? 'Ответ безопасный'
-                        : 'Засчитана ошибка'}
-                  </strong>
-                  <p>{chatInsight.userVerdict}</p>
-                </div>
-              </div>
-
-              {chatInsight.simulatedCode ? (
-                <div className="coach-section">
-                  <h3>Код из сообщения</h3>
-                  <div className="code-card">
-                    <span>Учебный код для этой сцены</span>
-                    <strong>{chatInsight.simulatedCode}</strong>
-                  </div>
-                </div>
-              ) : null}
-
-              {chatInsight.conversationEnded ? (
-                <div className="chat-banner">
-                  Учебная сцена завершена. Сбросьте диалог или выберите другой сценарий.
-                </div>
-              ) : null}
-            </aside>
-          </div>
-
-          <form className="chat-form" onSubmit={handleChatSubmit}>
-            <textarea
-              rows={3}
-              value={chatInput}
-              onChange={(event) => setChatInput(event.target.value)}
-              placeholder="Напишите, как бы вы ответили. Не вводите реальные коды, номера карт и персональные данные."
-            />
-            <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
-              Отправить
-            </button>
-          </form>
-        </section>
-
         <section className="panel" id="progress">
           <div className="section-heading">
             <div>
-              <p className="section-label">Мой прогресс</p>
-              <h2>Куда смотреть после тренировки</h2>
+              <p className="section-label">Ваш прогресс</p>
+              <h2>Что стоит подтянуть в первую очередь</h2>
             </div>
-            <p className="section-note">Сохраняется локально, без аккаунта.</p>
+            <p className="section-note">Данные сохраняются только в вашем браузере.</p>
           </div>
 
           <div className="progress-grid">
             <article className="progress-card">
-              <span>Завершено сценариев</span>
+              <span>Разобрано ситуаций</span>
               <strong>{progress.completedScenarioIds.length}</strong>
-              <p>Из {scenarios.length} доступных тренировок.</p>
+              <p>Из {scenarios.length} доступных сценариев.</p>
             </article>
 
             <article className="progress-card">
-              <span>ИИ-сессии</span>
+              <span>Диалоги с ИИ</span>
               <strong>{progress.chatSessionsCount}</strong>
-              <p>Живых учебных диалогов с разбором.</p>
+              <p>Учебных диалогов с обратной связью.</p>
             </article>
 
             <article className="progress-card">
               <span>Последняя активность</span>
               <strong>{formatRelative(progress.lastVisitedAt)}</strong>
-              <p>Любой выбор или успешный ответ чата обновляет метку.</p>
+              <p>Обновляется после выбора в сценариях и после ответов в чате.</p>
             </article>
           </div>
 
           <div className="mistake-board">
             <div>
-              <p className="section-label">Повторяющиеся ошибки</p>
-              <h3>Личная карта уязвимостей</h3>
+              <p className="section-label">Карта уязвимостей</p>
+              <h3>Повторяющиеся ошибки</h3>
             </div>
 
             {topMistakes.length ? (
@@ -723,20 +743,9 @@ function App() {
               </div>
             ) : (
               <div className="empty-state">
-                Ошибок пока нет. Пройдите хотя бы один сценарий и карта начнет заполняться.
+                Ошибок пока нет. Пройдите сценарий или диалог, чтобы увидеть персональную статистику.
               </div>
             )}
-          </div>
-        </section>
-
-        <section className="panel panel-wide panel-footer">
-          <div>
-            <p className="section-label">Контакты</p>
-            <h2>Связаться по проекту</h2>
-          </div>
-          <div className="contact-list">
-            <a href="tel:+375299431062">+375299431062</a>
-            <a href="mailto:youlianvr@gmail.com">youlianvr@gmail.com</a>
           </div>
         </section>
       </main>
