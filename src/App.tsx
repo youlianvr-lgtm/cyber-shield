@@ -19,6 +19,9 @@ import type {
   ScenarioStage,
 } from './types'
 
+type MainTab = 'learn' | 'chat' | 'cases' | 'progress'
+type ChatTab = 'dialog' | 'coach'
+
 const initialInsight: ChatInsight = {
   redFlags: ['Неожиданный контакт', 'Давление срочностью', 'Запрос чувствительных данных'],
   coachNote: 'После ответа появится разбор и уязвимости в вашей формулировке.',
@@ -175,6 +178,41 @@ const isChatApiResponse = (value: unknown): value is ChatApiResponse => {
   )
 }
 
+const useMediaQuery = (query: string) => {
+  const getMatches = () => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false
+    }
+
+    return window.matchMedia(query).matches
+  }
+
+  const [matches, setMatches] = useState(getMatches)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return
+    }
+
+    const mediaQueryList = window.matchMedia(query)
+    const onChange = () => setMatches(mediaQueryList.matches)
+
+    onChange()
+
+    if (typeof mediaQueryList.addEventListener === 'function') {
+      mediaQueryList.addEventListener('change', onChange)
+      return () => mediaQueryList.removeEventListener('change', onChange)
+    }
+
+    mediaQueryList.addListener(onChange)
+    return () => mediaQueryList.removeListener(onChange)
+  }, [query])
+
+  return matches
+}
+
+const normalizeHash = (hash: string) => hash.replace(/^#/, '').trim().toLowerCase()
+
 function App() {
   const [progress, setProgress] = useState<ProgressState>(() => loadProgress())
   const [activeScenarioId, setActiveScenarioId] = useState(scenarios[0].id)
@@ -189,10 +227,34 @@ function App() {
   const [chatError, setChatError] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [chatSessionCounted, setChatSessionCounted] = useState(false)
+  const [mainTab, setMainTab] = useState<MainTab>('learn')
+  const [chatTab, setChatTab] = useState<ChatTab>('dialog')
+  const isMobile = useMediaQuery('(max-width: 719px)')
 
   useEffect(() => {
     saveProgress(progress)
   }, [progress])
+
+  useEffect(() => {
+    if (!isMobile) {
+      return
+    }
+
+    const normalized = normalizeHash(window.location.hash)
+    if (!normalized) {
+      return
+    }
+
+    if (normalized === 'chat') {
+      setMainTab('chat')
+    } else if (normalized === 'cases') {
+      setMainTab('cases')
+    } else if (normalized === 'progress') {
+      setMainTab('progress')
+    } else if (normalized === 'signals' || normalized === 'tips' || normalized === 'overview') {
+      setMainTab('learn')
+    }
+  }, [isMobile])
 
   const selectedScenario = getScenarioById(activeScenarioId)
   const scenarioCompleted = currentStageId === null
@@ -389,6 +451,461 @@ function App() {
       : chatInsight.userWasSafe
         ? 'verdict-card verdict-card--safe'
         : 'verdict-card verdict-card--risk'
+
+  const setMobileTab = (nextTab: MainTab) => {
+    setMainTab(nextTab)
+
+    if (typeof window !== 'undefined' && typeof window.history?.replaceState === 'function') {
+      const nextHash = nextTab === 'learn' ? '#signals' : `#${nextTab}`
+      window.history.replaceState(null, '', nextHash)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const renderMobileChatCoach = () => (
+    <aside className="coach-panel coach-panel--mobile">
+      <div className="coach-risk">
+        <span>Уровень риска</span>
+        <strong>{riskTone}</strong>
+      </div>
+
+      <div className="coach-section">
+        <h3>Красные флаги</h3>
+        <div className="red-flag-row">
+          {chatInsight.redFlags.map((flag) => (
+            <span className="red-flag-pill" key={flag}>
+              {flag}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="coach-section">
+        <h3>Разбор</h3>
+        <p>{chatInsight.coachNote}</p>
+      </div>
+
+      <div className="coach-section">
+        <h3>Оценка реакции</h3>
+        <div className={verdictTone}>
+          <strong>
+            {chatInsight.userWasSafe === null
+              ? 'Нужна более точная формулировка'
+              : chatInsight.userWasSafe
+                ? 'Реакция безопасная'
+                : 'Реакция рискованная'}
+          </strong>
+          <p>{chatInsight.userVerdict}</p>
+        </div>
+      </div>
+
+      {chatInsight.simulatedCode ? (
+        <div className="coach-section">
+          <h3>Учебный код</h3>
+          <div className="code-card">
+            <span>Пример кода, который могут пытаться выманить</span>
+            <strong>{chatInsight.simulatedCode}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      {chatInsight.conversationEnded ? (
+        <div className="chat-banner">Сцена завершена. Начните новый диалог или смените сценарий.</div>
+      ) : null}
+    </aside>
+  )
+
+  const renderMobileChat = () => (
+    <section className="panel panel-chat panel-chat--mobile" id="chat">
+      <div className="section-heading">
+        <div>
+          <p className="section-label">Практика</p>
+          <h2>Тренажер диалога</h2>
+        </div>
+        <p className="section-note">Только учебные ответы. Без реальных кодов и данных.</p>
+      </div>
+
+      <div className="segmented" role="tablist" aria-label="Режим тренажера">
+        <button
+          className={chatTab === 'dialog' ? 'active' : ''}
+          onClick={() => setChatTab('dialog')}
+          type="button"
+          role="tab"
+          aria-selected={chatTab === 'dialog'}
+        >
+          Диалог
+        </button>
+        <button
+          className={chatTab === 'coach' ? 'active' : ''}
+          onClick={() => setChatTab('coach')}
+          type="button"
+          role="tab"
+          aria-selected={chatTab === 'coach'}
+        >
+          Разбор
+        </button>
+      </div>
+
+      {!apiUrl ? (
+        <div className="chat-banner">
+          Укажите <code>VITE_CHAT_API_URL</code>, чтобы включить живой диалог через Cloudflare Worker.
+        </div>
+      ) : null}
+
+      {chatError ? <div className="chat-banner chat-banner--error">{chatError}</div> : null}
+
+      {chatTab === 'coach' ? (
+        <>
+          <div className="chat-toolbar chat-toolbar--mobile">
+            <label>
+              Сценарий
+              <select value={chatScenarioHint} onChange={(event) => setChatScenarioHint(event.target.value)}>
+                {scenarioHints.map((hint) => (
+                  <option key={hint} value={hint}>
+                    {hint}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Сложность
+              <select value={chatDifficulty} onChange={(event) => setChatDifficulty(event.target.value)}>
+                {chatDifficulties.map((difficulty) => (
+                  <option key={difficulty} value={difficulty}>
+                    {difficulty}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button className="ghost-button" onClick={resetChat} type="button">
+              Начать заново
+            </button>
+          </div>
+
+          {renderMobileChatCoach()}
+        </>
+      ) : (
+        <>
+          <div className="chat-thread chat-thread--mobile" aria-live="polite">
+            {chatMessages.map((message) => (
+              <div
+                className={`chat-bubble ${
+                  message.role === 'assistant' ? 'chat-bubble--assistant' : 'chat-bubble--user'
+                }`}
+                key={message.id}
+              >
+                <span>{message.role === 'assistant' ? 'Собеседник' : 'Вы'}</span>
+                <p>{message.content}</p>
+              </div>
+            ))}
+
+            {isSending ? <div className="chat-thinking">Ответ обрабатывается…</div> : null}
+          </div>
+
+          <form className="chat-form chat-form--mobile" onSubmit={handleChatSubmit}>
+            <textarea
+              rows={2}
+              value={chatInput}
+              onChange={(event) => setChatInput(event.target.value)}
+              placeholder="Например: Я завершаю разговор и перезваниваю в банк по официальному номеру."
+            />
+            <div className="chat-form-actions">
+              <button className="ghost-button" onClick={resetChat} type="button">
+                Сброс
+              </button>
+              <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
+                Отправить
+              </button>
+            </div>
+          </form>
+        </>
+      )}
+    </section>
+  )
+
+  if (isMobile) {
+    return (
+      <div className="app-shell app-shell--mobile">
+        <header className="mobile-header" id="overview">
+          <div className="eyebrow">Cyber Shield</div>
+          <h1 className="mobile-title">Тренируйтесь распознавать мошеннические сценарии.</h1>
+          <div className="mobile-metrics" aria-label="Ключевые метрики">
+            <div className="mini-metric">
+              <span>Сценарии</span>
+              <strong>{scenarios.length}</strong>
+            </div>
+            <div className="mini-metric">
+              <span>Изучено</span>
+              <strong>{progress.completedScenarioIds.length}</strong>
+            </div>
+            <div className="mini-metric">
+              <span>Диалоги</span>
+              <strong>{progress.chatSessionsCount}</strong>
+            </div>
+          </div>
+        </header>
+
+        <main className="tabview" aria-label="Контент">
+          {mainTab === 'learn' ? (
+            <div className="tabpage">
+              <section className="panel panel-wide" id="signals">
+                <div className="section-heading">
+                  <div>
+                    <p className="section-label">База распознавания</p>
+                    <h2>Сигналы риска</h2>
+                  </div>
+                  <p className="section-note">Карточки-маркеры и формулировки для проверки.</p>
+                </div>
+
+                <div className="signal-grid">
+                  {recognitionCards.map((card) => (
+                    <article className="signal-card" key={card.title}>
+                      <h3>{card.title}</h3>
+                      <p>{card.body}</p>
+                      <span>{card.cue}</span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel" id="tips">
+                <div className="section-heading">
+                  <div>
+                    <p className="section-label">Советы</p>
+                    <h2>Короткие формулировки</h2>
+                  </div>
+                  <p className="section-note">Без интерпретаций: только прямые рекомендации.</p>
+                </div>
+                <div className="quotes-grid">
+                  {safetyQuotes.map((quote) => (
+                    <blockquote className="quote-card" key={quote}>
+                      {quote}
+                    </blockquote>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {mainTab === 'chat' ? <div className="tabpage">{renderMobileChat()}</div> : null}
+
+          {mainTab === 'cases' ? (
+            <div className="tabpage">
+              <section className="panel panel-wide" id="cases">
+                <div className="section-heading">
+                  <div>
+                    <p className="section-label">Сценарии</p>
+                    <h2>Тренировка на примерах</h2>
+                  </div>
+                  <p className="section-note">Выбирайте вариант ответа и смотрите последствия.</p>
+                </div>
+
+                <div className="training-layout">
+                  <aside className="scenario-list">
+                    {scenarios.map((scenario) => {
+                      const isActive = scenario.id === selectedScenario.id
+                      const isCompleted = progress.completedScenarioIds.includes(scenario.id)
+                      return (
+                        <button
+                          key={scenario.id}
+                          className={`scenario-button${isActive ? ' active' : ''}`}
+                          onClick={() => chooseScenario(scenario.id)}
+                          type="button"
+                        >
+                          <span className="scenario-category">{scenario.category}</span>
+                          <strong>{scenario.title}</strong>
+                          <small>
+                            {scenario.difficulty}
+                            {isCompleted ? ' · изучено' : ''}
+                          </small>
+                        </button>
+                      )
+                    })}
+                  </aside>
+
+                  <div className="scenario-workspace">
+                    <div className="scenario-header">
+                      <div>
+                        <p className="section-label">{selectedScenario.category}</p>
+                        <h3>{selectedScenario.title}</h3>
+                        <p>{selectedScenario.intro}</p>
+                      </div>
+                      <button className="ghost-button" onClick={resetScenario} type="button">
+                        Пройти заново
+                      </button>
+                    </div>
+
+                    <div className="timeline">
+                      {scenarioTimeline.map(({ stage, result }) => (
+                        <div className="timeline-entry" key={stage.id}>
+                          <div className="message-bubble message-bubble--scammer">
+                            <span className="message-role">Собеседник</span>
+                            <p>{stage.message}</p>
+                          </div>
+
+                          {result ? (
+                            <>
+                              <div className="message-bubble message-bubble--user">
+                                <span className="message-role">Ваш ответ</span>
+                                <p>{stage.choices.find((choice) => choice.id === result.choiceId)?.label}</p>
+                              </div>
+
+                              <div
+                                className={`feedback-card ${
+                                  result.outcome === 'safe' ? 'feedback-card--safe' : 'feedback-card--risk'
+                                }`}
+                              >
+                                <strong>
+                                  {result.outcome === 'safe' ? 'Безопасное решение' : 'Рискованное решение'}
+                                </strong>
+                                <p>{result.explanation}</p>
+                                <span>{result.coachTip}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="choice-panel">
+                              <p className="choice-prompt">{stage.prompt}</p>
+                              <div className="red-flag-row">
+                                {stage.redFlags.map((flag) => (
+                                  <span className="red-flag-pill" key={flag}>
+                                    {flag}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="choice-list">
+                                {stage.choices.map((choice) => (
+                                  <button
+                                    className="choice-button"
+                                    key={choice.id}
+                                    onClick={() => handleChoice(stage, choice)}
+                                    type="button"
+                                  >
+                                    {choice.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {scenarioCompleted ? (
+                      <div className="scenario-summary">
+                        <div>
+                          <p className="section-label">Итог</p>
+                          <h3>{currentRunScore}% безопасных решений</h3>
+                          <p>{selectedScenario.summary}</p>
+                        </div>
+                        <div className="summary-tags">
+                          {selectedScenario.tags.map((tag) => (
+                            <span key={tag}>{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {mainTab === 'progress' ? (
+            <div className="tabpage">
+              <section className="panel" id="progress">
+                <div className="section-heading">
+                  <div>
+                    <p className="section-label">Ваш прогресс</p>
+                    <h2>Личная статистика</h2>
+                  </div>
+                  <p className="section-note">Данные сохраняются только в вашем браузере.</p>
+                </div>
+
+                <div className="progress-grid">
+                  <article className="progress-card">
+                    <span>Разобрано ситуаций</span>
+                    <strong>{progress.completedScenarioIds.length}</strong>
+                    <p>Из {scenarios.length} доступных сценариев.</p>
+                  </article>
+
+                  <article className="progress-card">
+                    <span>Диалоги</span>
+                    <strong>{progress.chatSessionsCount}</strong>
+                    <p>Тренировочных сессий с обратной связью.</p>
+                  </article>
+
+                  <article className="progress-card">
+                    <span>Последняя активность</span>
+                    <strong>{formatRelative(progress.lastVisitedAt)}</strong>
+                    <p>Обновляется после выбора в сценариях и ответов в диалоге.</p>
+                  </article>
+                </div>
+
+                <div className="mistake-board">
+                  <div>
+                    <p className="section-label">Карта уязвимостей</p>
+                    <h3>Повторяющиеся ошибки</h3>
+                  </div>
+
+                  {topMistakes.length ? (
+                    <div className="mistake-list">
+                      {topMistakes.map(([tag, count]) => (
+                        <div className="mistake-item" key={tag}>
+                          <span>{tag}</span>
+                          <strong>{count}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state">
+                      Ошибок пока нет. Пройдите сценарий или диалог, чтобы увидеть персональную статистику.
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          ) : null}
+        </main>
+
+        <nav className="tabbar" aria-label="Разделы">
+          <button
+            className={mainTab === 'learn' ? 'active' : ''}
+            onClick={() => setMobileTab('learn')}
+            type="button"
+            aria-current={mainTab === 'learn' ? 'page' : undefined}
+          >
+            База
+          </button>
+          <button
+            className={mainTab === 'chat' ? 'active' : ''}
+            onClick={() => setMobileTab('chat')}
+            type="button"
+            aria-current={mainTab === 'chat' ? 'page' : undefined}
+          >
+            Чат
+          </button>
+          <button
+            className={mainTab === 'cases' ? 'active' : ''}
+            onClick={() => setMobileTab('cases')}
+            type="button"
+            aria-current={mainTab === 'cases' ? 'page' : undefined}
+          >
+            Сценарии
+          </button>
+          <button
+            className={mainTab === 'progress' ? 'active' : ''}
+            onClick={() => setMobileTab('progress')}
+            type="button"
+            aria-current={mainTab === 'progress' ? 'page' : undefined}
+          >
+            Прогресс
+          </button>
+        </nav>
+      </div>
+    )
+  }
 
   return (
     <div className="app-shell">

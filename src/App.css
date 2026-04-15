@@ -528,6 +528,165 @@
   background: #fff;
 }
 
+.app-shell--mobile {
+  width: min(540px, 100%);
+  margin: 0 auto;
+  padding: 12px 12px calc(92px + env(safe-area-inset-bottom));
+}
+
+.app-shell--mobile .panel {
+  border-radius: 18px;
+  box-shadow: none;
+  padding: 16px;
+}
+
+.app-shell--mobile .panel-wide {
+  padding: 16px;
+}
+
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  padding: calc(12px + env(safe-area-inset-top)) 12px 12px;
+  margin: -12px -12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(243, 246, 248, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+.mobile-title {
+  margin: 8px 0 10px;
+  font-size: clamp(1.55rem, 6.2vw, 2.1rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.mobile-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mini-metric {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.85);
+  display: grid;
+  gap: 4px;
+}
+
+.mini-metric span {
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-soft);
+}
+
+.mini-metric strong {
+  font-size: 1.2rem;
+}
+
+.tabview {
+  display: grid;
+  gap: 14px;
+}
+
+.tabpage {
+  display: grid;
+  gap: 14px;
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: rgba(243, 246, 248, 0.92);
+  backdrop-filter: blur(10px);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tabbar button {
+  min-height: 46px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.88);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.tabbar button.active {
+  border-color: rgba(15, 103, 165, 0.32);
+  background: linear-gradient(150deg, rgba(15, 103, 165, 0.14), rgba(255, 255, 255, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(15, 103, 165, 0.1);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.segmented button {
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.segmented button.active {
+  border-color: rgba(15, 103, 165, 0.28);
+  background: rgba(15, 103, 165, 0.1);
+}
+
+.panel-chat--mobile .section-heading h2 {
+  font-size: clamp(1.35rem, 5vw, 1.8rem);
+}
+
+.chat-thread--mobile {
+  max-height: 52vh;
+}
+
+.coach-panel--mobile {
+  padding: 12px;
+}
+
+.chat-toolbar--mobile {
+  grid-template-columns: 1fr;
+}
+
+.chat-form--mobile textarea {
+  resize: none;
+}
+
+.chat-form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 10px;
+}
+
+.app-shell--mobile .training-layout {
+  gap: 12px;
+}
+
+.app-shell--mobile .scenario-list {
+  grid-template-columns: 1fr;
+}
+
 @media (min-width: 720px) {
   .app-shell {
     padding: 18px 18px 34px;
