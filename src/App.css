@@ -1,64 +1,68 @@
-.app-shell {
+﻿.app-shell {
+  width: min(1220px, 100%);
+  margin: 0 auto;
   padding: 14px 12px 28px;
 }
 
 .hero-panel {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
 .top-nav {
   position: sticky;
   top: 10px;
-  z-index: 5;
+  z-index: 40;
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding: 8px;
-  border: 1px solid rgba(19, 46, 72, 0.14);
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
   scrollbar-width: thin;
 }
 
 .top-nav a {
   flex: 0 0 auto;
-  min-height: 38px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 14px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   font-size: 0.9rem;
   font-weight: 700;
-  color: var(--ink-strong);
-  background: rgba(240, 244, 239, 0.8);
+  color: var(--text);
+  background: rgba(233, 238, 242, 0.84);
 }
 
 .hero-copy,
 .hero-scoreboard,
 .panel {
-  border: 1px solid rgba(19, 46, 72, 0.12);
+  border: 1px solid var(--line);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 248, 244, 0.95));
-  box-shadow: 0 16px 36px rgba(16, 40, 62, 0.08);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .hero-copy {
-  padding: 20px 18px;
+  padding: 20px 16px;
   background:
-    radial-gradient(circle at top right, rgba(255, 161, 90, 0.35), transparent 32%),
-    radial-gradient(circle at 15% 20%, rgba(24, 126, 89, 0.2), transparent 34%),
-    linear-gradient(140deg, rgba(246, 239, 221, 0.95), rgba(255, 255, 255, 0.92));
+    radial-gradient(circle at 100% 0%, rgba(15, 103, 165, 0.16), transparent 34%),
+    radial-gradient(circle at 0% 90%, rgba(177, 84, 24, 0.08), transparent 40%),
+    var(--surface-strong);
 }
 
 .hero-copy h1 {
   margin: 10px 0 14px;
-  max-width: 16ch;
+  max-width: 18ch;
 }
 
 .hero-lead {
+  max-width: 56ch;
   font-size: 1.02rem;
 }
 
@@ -79,7 +83,7 @@
 .hero-actions {
   display: grid;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 16px;
 }
 
 .primary-link,
@@ -91,16 +95,16 @@
   border: none;
   cursor: pointer;
   transition:
-    transform 140ms ease,
-    box-shadow 140ms ease,
-    border-color 140ms ease,
-    background 140ms ease;
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease;
 }
 
 .primary-link,
 .secondary-link {
   min-height: 46px;
-  padding: 0 16px;
+  padding: 0 18px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -110,16 +114,16 @@
 
 .primary-link,
 .primary-button {
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: #fff;
-  box-shadow: 0 14px 24px rgba(206, 83, 35, 0.24);
+  background: linear-gradient(140deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 12px 24px rgba(15, 103, 165, 0.22);
 }
 
 .secondary-link,
 .ghost-button {
-  color: var(--ink-strong);
-  border: 1px solid rgba(19, 46, 72, 0.16);
-  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .primary-link:hover,
@@ -136,28 +140,28 @@
   display: grid;
   gap: 10px;
   background:
-    radial-gradient(circle at top center, rgba(24, 126, 89, 0.18), transparent 36%),
-    linear-gradient(180deg, rgba(235, 247, 240, 0.96), rgba(255, 255, 255, 0.92));
+    radial-gradient(circle at 100% 0%, rgba(15, 103, 165, 0.13), transparent 32%),
+    var(--surface-strong);
 }
 
 .metric-card {
   padding: 14px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(19, 46, 72, 0.1);
+  border: 1px solid var(--line);
+  background: #fff;
 }
 
 .metric-card strong,
 .progress-card strong,
 .coach-risk strong {
   display: block;
-  margin: 6px 0 4px;
-  color: var(--ink-strong);
-  font-size: 1.8rem;
+  margin: 4px 0 4px;
+  color: var(--text);
+  font-size: 1.86rem;
 }
 
 .metric-card small {
-  color: var(--ink-soft);
+  color: var(--text-soft);
 }
 
 .content-grid {
@@ -188,29 +192,39 @@
 }
 
 .signal-grid,
-.progress-grid {
+.progress-grid,
+.quotes-grid {
   display: grid;
   gap: 12px;
 }
 
 .signal-card,
 .progress-card,
+.quote-card,
 .mistake-item,
 .feedback-card,
 .scenario-summary,
 .coach-panel,
 .chat-thread,
 .choice-panel {
-  border: 1px solid rgba(19, 46, 72, 0.1);
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.84);
+  background: #fff;
 }
 
 .signal-card,
 .progress-card,
 .feedback-card,
-.choice-panel {
+.choice-panel,
+.quote-card {
   padding: 14px;
+}
+
+.quote-card {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+  background: linear-gradient(180deg, #fff, #f7fafc);
 }
 
 .signal-card h3 {
@@ -221,8 +235,8 @@
 .feedback-card span {
   display: block;
   margin-top: 10px;
-  color: var(--ink-strong);
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 700;
 }
 
 .training-layout,
@@ -248,8 +262,8 @@
   text-align: left;
   padding: 12px;
   border-radius: 16px;
-  background: rgba(246, 247, 242, 0.9);
-  border: 1px solid rgba(19, 46, 72, 0.1);
+  border: 1px solid var(--line);
+  background: #f8fbfd;
 }
 
 .scenario-button strong,
@@ -259,9 +273,9 @@
 }
 
 .scenario-button.active {
-  background: linear-gradient(140deg, rgba(20, 95, 85, 0.14), rgba(255, 255, 255, 0.94));
-  border-color: rgba(20, 95, 85, 0.34);
-  box-shadow: inset 0 0 0 1px rgba(20, 95, 85, 0.16);
+  border-color: rgba(15, 103, 165, 0.38);
+  background: linear-gradient(150deg, rgba(15, 103, 165, 0.12), #fff);
+  box-shadow: inset 0 0 0 1px rgba(15, 103, 165, 0.14);
 }
 
 .scenario-header,
@@ -273,9 +287,9 @@
 
 .message-bubble,
 .chat-bubble {
+  width: min(100%, 74ch);
   padding: 14px;
   border-radius: 18px;
-  max-width: 100%;
 }
 
 .message-bubble p,
@@ -287,19 +301,19 @@
 .message-bubble--scammer,
 .chat-bubble--assistant {
   justify-self: start;
-  background: rgba(255, 241, 228, 0.9);
-  border: 1px solid rgba(206, 83, 35, 0.16);
+  background: #f6f9fc;
+  border: 1px solid #cfdeea;
 }
 
 .message-bubble--user,
 .chat-bubble--user {
   justify-self: end;
-  background: rgba(228, 245, 239, 0.96);
-  border: 1px solid rgba(20, 95, 85, 0.16);
+  background: #edf7f2;
+  border: 1px solid #cae8d9;
 }
 
 .choice-prompt {
-  color: var(--ink-strong);
+  color: var(--text);
   font-weight: 700;
 }
 
@@ -324,53 +338,48 @@
   display: inline-flex;
   align-items: center;
   font-size: 0.88rem;
-  background: rgba(19, 46, 72, 0.08);
+  background: #e9f1f8;
+  color: var(--text);
 }
 
 .choice-button {
   text-align: left;
   padding: 12px;
   border-radius: 14px;
-  background: rgba(246, 247, 242, 0.9);
-  border: 1px solid rgba(19, 46, 72, 0.1);
-  color: var(--ink-strong);
+  border: 1px solid var(--line);
+  background: #f8fbfd;
+  color: var(--text);
 }
 
 .feedback-card--safe {
-  border-color: rgba(20, 95, 85, 0.18);
-  background: rgba(231, 245, 239, 0.92);
+  border-color: rgba(30, 125, 91, 0.24);
+  background: #eef9f4;
 }
 
 .feedback-card--risk {
-  border-color: rgba(206, 83, 35, 0.18);
-  background: rgba(255, 239, 231, 0.92);
-}
-
-.scenario-summary {
-  padding: 16px;
-  display: grid;
-  gap: 10px;
+  border-color: rgba(177, 84, 24, 0.24);
+  background: #fff3ea;
 }
 
 .panel-chat {
   background:
-    radial-gradient(circle at top left, rgba(255, 161, 90, 0.18), transparent 30%),
-    linear-gradient(180deg, rgba(250, 248, 242, 0.98), rgba(255, 255, 255, 0.94));
+    radial-gradient(circle at 0% 0%, rgba(15, 103, 165, 0.09), transparent 35%),
+    var(--surface);
 }
 
 .chat-toolbar label {
   display: grid;
   gap: 8px;
   font-weight: 600;
-  color: var(--ink-strong);
+  color: var(--text);
 }
 
 .chat-toolbar select,
 .chat-form textarea {
-  border: 1px solid rgba(19, 46, 72, 0.14);
+  border: 1px solid var(--line-strong);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--ink-strong);
+  background: #fff;
+  color: var(--text);
   font: inherit;
 }
 
@@ -389,13 +398,14 @@
   margin-top: 12px;
   padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(255, 240, 218, 0.88);
-  border: 1px solid rgba(206, 83, 35, 0.14);
-  color: var(--ink-strong);
+  background: #eff5fb;
+  border: 1px solid #cfdeea;
+  color: var(--text);
 }
 
 .chat-banner--error {
-  background: rgba(255, 232, 228, 0.9);
+  background: #ffecea;
+  border-color: #f2c7c1;
 }
 
 .chat-layout {
@@ -421,32 +431,32 @@
 }
 
 .chat-thinking {
-  color: var(--ink-soft);
+  color: var(--text-soft);
   font-style: italic;
 }
 
 .coach-risk {
   padding: 12px;
   border-radius: 14px;
-  background: rgba(246, 247, 242, 0.94);
+  background: #f4f8fc;
 }
 
 .verdict-card,
 .code-card {
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(19, 46, 72, 0.1);
-  background: rgba(246, 247, 242, 0.94);
+  border: 1px solid var(--line);
+  background: #f9fbfc;
 }
 
 .verdict-card--safe {
-  border-color: rgba(20, 95, 85, 0.18);
-  background: rgba(231, 245, 239, 0.92);
+  border-color: rgba(30, 125, 91, 0.24);
+  background: #eef9f4;
 }
 
 .verdict-card--risk {
-  border-color: rgba(206, 83, 35, 0.18);
-  background: rgba(255, 239, 231, 0.92);
+  border-color: rgba(177, 84, 24, 0.24);
+  background: #fff3ea;
 }
 
 .verdict-card strong,
@@ -458,13 +468,13 @@
 .code-card span {
   display: block;
   margin-bottom: 5px;
-  color: var(--ink-soft);
+  color: var(--text-soft);
   font-size: 0.88rem;
 }
 
 .code-card strong {
-  font-size: 1.75rem;
-  font-family: 'IBM Plex Mono', Consolas, monospace;
+  font-size: 1.48rem;
+  font-family: 'JetBrains Mono', Consolas, monospace;
   letter-spacing: 0.16em;
 }
 
@@ -476,6 +486,7 @@
   width: 100%;
   padding: 12px;
   resize: vertical;
+  min-height: 110px;
 }
 
 .primary-button,
@@ -497,9 +508,9 @@
 
 .mistake-board {
   padding: 14px;
-  border: 1px solid rgba(19, 46, 72, 0.1);
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(246, 247, 242, 0.84);
+  background: #f8fbfd;
 }
 
 .mistake-item {
@@ -514,16 +525,16 @@
 .empty-state {
   padding: 12px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.86);
+  background: #fff;
 }
 
 @media (min-width: 720px) {
   .app-shell {
-    padding: 20px 18px 34px;
+    padding: 18px 18px 34px;
   }
 
   .hero-panel {
-    grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.8fr);
+    grid-template-columns: minmax(0, 1.22fr) minmax(260px, 0.78fr);
     gap: 16px;
   }
 
@@ -542,7 +553,8 @@
   }
 
   .signal-grid,
-  .progress-grid {
+  .progress-grid,
+  .quotes-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -581,7 +593,8 @@
     padding: 24px;
   }
 
-  .signal-grid {
+  .signal-grid,
+  .quotes-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 

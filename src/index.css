@@ -1,24 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
 :root {
-  --bg-top: #f2e6d6;
-  --bg-bottom: #eef3eb;
-  --surface: rgba(255, 255, 255, 0.78);
-  --ink-strong: #17324a;
-  --ink-soft: #556779;
-  --accent: #c94d21;
-  --accent-strong: #8f3417;
-  --success: #145f55;
-  --shadow: 0 20px 40px rgba(23, 50, 74, 0.08);
+  --bg: #f3f6f8;
+  --bg-soft: #e9eef2;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-strong: #ffffff;
+  --line: #d8e2ea;
+  --line-strong: #bfd1df;
+  --text: #1c2e3d;
+  --text-soft: #556b7d;
+  --accent: #0f67a5;
+  --accent-strong: #0b4f80;
+  --warning: #b15418;
+  --success: #1e7d5b;
+  --shadow: 0 14px 34px rgba(17, 42, 64, 0.09);
 
-  font-family: 'Manrope', 'Segoe UI', sans-serif;
+  font-family: 'Onest', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 500;
-  color: var(--ink-soft);
-  background:
-    radial-gradient(circle at top left, rgba(255, 174, 94, 0.28), transparent 26%),
-    radial-gradient(circle at top right, rgba(20, 95, 85, 0.16), transparent 22%),
-    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  color: var(--text-soft);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -31,13 +31,17 @@
 }
 
 html {
-  scroll-padding-top: 24px;
+  scroll-padding-top: 96px;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(15, 103, 165, 0.14), transparent 34%),
+    radial-gradient(circle at 95% 5%, rgba(177, 84, 24, 0.1), transparent 26%),
+    linear-gradient(180deg, var(--bg), var(--bg-soft));
 }
 
 a {
@@ -55,38 +59,38 @@ textarea:focus,
 select:focus,
 button:focus,
 a:focus {
-  outline: 3px solid rgba(20, 95, 85, 0.2);
+  outline: 3px solid rgba(15, 103, 165, 0.28);
   outline-offset: 2px;
 }
 
 code {
-  font-family: 'IBM Plex Mono', Consolas, monospace;
-  font-size: 0.92em;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.9em;
 }
 
 h1,
 h2,
 h3,
 strong {
-  color: var(--ink-strong);
+  color: var(--text);
 }
 
 h1 {
-  font-size: clamp(2.9rem, 7vw, 5.2rem);
-  line-height: 0.94;
-  letter-spacing: -0.05em;
+  font-size: clamp(2.1rem, 8.4vw, 4.7rem);
+  line-height: 0.97;
+  letter-spacing: -0.035em;
 }
 
 h2 {
-  font-size: clamp(1.8rem, 3.8vw, 2.7rem);
-  line-height: 1.02;
-  letter-spacing: -0.04em;
+  font-size: clamp(1.5rem, 5.6vw, 2.5rem);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
 }
 
 h3 {
-  font-size: clamp(1.2rem, 2.3vw, 1.55rem);
-  line-height: 1.1;
-  letter-spacing: -0.03em;
+  font-size: clamp(1.12rem, 3.2vw, 1.5rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
 }
 
 p {

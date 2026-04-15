@@ -1,7 +1,13 @@
-import { startTransition, useEffect, useState } from 'react'
+﻿import { startTransition, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
-import { chatDifficulties, recognitionCards, scenarioHints, scenarios } from './data/content'
+import {
+  chatDifficulties,
+  recognitionCards,
+  safetyQuotes,
+  scenarioHints,
+  scenarios,
+} from './data/content'
 import { loadProgress, saveProgress } from './lib/storage'
 import type {
   ChatApiResponse,
@@ -14,12 +20,11 @@ import type {
 } from './types'
 
 const initialInsight: ChatInsight = {
-  redFlags: ['Неожиданный контакт', 'Давление срочностью', 'Попытка получить данные'],
-  coachNote:
-    'После ответа появится короткий разбор. Цель: вовремя распознать манипуляцию и спокойно прервать сценарий мошенника.',
+  redFlags: ['Неожиданный контакт', 'Давление срочностью', 'Запрос чувствительных данных'],
+  coachNote: 'После ответа появится разбор и уязвимости в вашей формулировке.',
   riskLevel: 'medium',
   conversationEnded: false,
-  userVerdict: 'Оценка появится после первой вашей реплики.',
+  userVerdict: 'Оценка появится после вашей первой реплики.',
   userWasSafe: null,
   mistakeTag: null,
   simulatedCode: null,
@@ -30,7 +35,7 @@ const initialChatMessages = (): ChatMessage[] => [
     id: crypto.randomUUID(),
     role: 'assistant',
     content:
-      'Здравствуйте. По вашему счету замечена подозрительная операция. Нужно подтвердить отмену прямо сейчас, иначе платеж уйдет.',
+      'Здравствуйте. По вашей карте зафиксирована подозрительная операция. Подтвердите отмену прямо сейчас.',
   },
 ]
 
@@ -280,7 +285,7 @@ function App() {
     }
 
     if (!apiUrl) {
-      setChatError('Живой ИИ-диалог пока не подключен. Укажите VITE_CHAT_API_URL и обновите страницу.')
+      setChatError('Живой диалог пока не подключен. Укажите VITE_CHAT_API_URL и обновите страницу.')
       return
     }
 
@@ -326,7 +331,7 @@ function App() {
       const resolvedUserVerdict =
         localEvaluation?.userVerdict ??
         (resolvedUserWasSafe === null
-          ? 'Ответ принят. Для точной оценки добавьте, что именно вы делаете: отказываетесь, проверяете источник или соглашаетесь.'
+          ? 'Ответ принят. Для точной оценки укажите, что именно вы делаете: отказываетесь, проверяете источник или соглашаетесь.'
           : data.userVerdict)
 
       setChatMessages((previous) => [
@@ -364,7 +369,7 @@ function App() {
       }
     } catch {
       setChatError(
-        'Не удалось получить ответ от прокси. Проверьте Worker, переменную VITE_CHAT_API_URL и настройки CORS.',
+        'Не удалось получить ответ от прокси. Проверьте Worker, VITE_CHAT_API_URL и настройки CORS.',
       )
     } finally {
       setIsSending(false)
@@ -390,25 +395,25 @@ function App() {
       <header className="hero-panel" id="overview">
         <nav className="top-nav" aria-label="Навигация по разделам">
           <a href="#signals">Признаки</a>
-          <a href="#chat">Диалог</a>
-          <a href="#cases">Разбор ситуаций</a>
+          <a href="#chat">Тренажер</a>
+          <a href="#cases">Сценарии</a>
+          <a href="#tips">Советы</a>
           <a href="#progress">Прогресс</a>
         </nav>
 
         <div className="hero-copy">
-          <div className="eyebrow">КиберПраво: распознавание мошенничества</div>
-          <h1>Учитесь видеть мошенника до того, как он получит ваши данные.</h1>
+          <div className="eyebrow">Cyber Shield</div>
+          <h1>Распознавайте схему до того, как от вас попросят данные или деньги.</h1>
           <p className="hero-lead">
-            Сайт заточен под навык распознавания: сначала признаки схем, затем живой диалог с разбором и
-            практические ситуации для закрепления.
+            Практический тренажер: сигналы риска, диалог с имитацией давления, сценарии с разбором ошибок.
           </p>
 
           <div className="hero-actions">
             <a className="primary-link" href="#signals">
-              Начать с признаков
+              Начать обучение
             </a>
             <a className="secondary-link" href="#chat">
-              Перейти к диалогу
+              Открыть тренажер
             </a>
           </div>
         </div>
@@ -417,17 +422,17 @@ function App() {
           <div className="metric-card">
             <span>Сценарии</span>
             <strong>{scenarios.length}</strong>
-            <small>типичных мошеннических схем</small>
+            <small>типовых мошеннических схем</small>
           </div>
           <div className="metric-card">
             <span>Изучено</span>
             <strong>{progress.completedScenarioIds.length}</strong>
-            <small>ситуаций разобрано вами</small>
+            <small>сценариев завершено</small>
           </div>
           <div className="metric-card">
-            <span>Диалоги с ИИ</span>
+            <span>Диалоги</span>
             <strong>{progress.chatSessionsCount}</strong>
-            <small>реплик с мгновенным разбором</small>
+            <small>тренировочных сессий</small>
           </div>
         </aside>
       </header>
@@ -437,11 +442,9 @@ function App() {
           <div className="section-heading">
             <div>
               <p className="section-label">База распознавания</p>
-              <h2>Сигналы, которые чаще всего выдают мошенника</h2>
+              <h2>Сигналы, которые чаще всего выдают мошеннический сценарий</h2>
             </div>
-            <p className="section-note">
-              Начните с этих маркеров, чтобы быстрее замечать схему в звонке, чате или письме.
-            </p>
+            <p className="section-note">Каждая карточка — краткий маркер и практическая формулировка для проверки.</p>
           </div>
 
           <div className="signal-grid">
@@ -459,7 +462,7 @@ function App() {
           <div className="section-heading">
             <div>
               <p className="section-label">Практика в диалоге</p>
-              <h2>Проверяйте свои формулировки в разговоре с мошенником</h2>
+              <h2>Проверьте формулировки ответа под давлением</h2>
             </div>
             <p className="section-note">Пишите только учебные ответы, без реальных кодов и персональных данных.</p>
           </div>
@@ -488,7 +491,7 @@ function App() {
             </label>
 
             <button className="ghost-button" onClick={resetChat} type="button">
-              Начать диалог заново
+              Начать заново
             </button>
           </div>
 
@@ -508,7 +511,7 @@ function App() {
               </div>
 
               <div className="coach-section">
-                <h3>Что настораживает</h3>
+                <h3>Красные флаги</h3>
                 <div className="red-flag-row">
                   {chatInsight.redFlags.map((flag) => (
                     <span className="red-flag-pill" key={flag}>
@@ -519,7 +522,7 @@ function App() {
               </div>
 
               <div className="coach-section">
-                <h3>Короткий разбор</h3>
+                <h3>Разбор</h3>
                 <p>{chatInsight.coachNote}</p>
               </div>
 
@@ -541,7 +544,7 @@ function App() {
                 <div className="coach-section">
                   <h3>Учебный код</h3>
                   <div className="code-card">
-                    <span>Пример кода, который пытаются выманить</span>
+                    <span>Пример кода, который могут пытаться выманить</span>
                     <strong>{chatInsight.simulatedCode}</strong>
                   </div>
                 </div>
@@ -560,12 +563,12 @@ function App() {
                   }`}
                   key={message.id}
                 >
-                  <span>{message.role === 'assistant' ? 'Мошенник' : 'Вы'}</span>
+                  <span>{message.role === 'assistant' ? 'Собеседник' : 'Вы'}</span>
                   <p>{message.content}</p>
                 </div>
               ))}
 
-              {isSending ? <div className="chat-thinking">ИИ анализирует ваш ответ…</div> : null}
+              {isSending ? <div className="chat-thinking">Ответ обрабатывается…</div> : null}
             </div>
           </div>
 
@@ -574,7 +577,7 @@ function App() {
               rows={3}
               value={chatInput}
               onChange={(event) => setChatInput(event.target.value)}
-              placeholder="Напишите, как вы бы ответили. Например: откажусь, завершу разговор, проверю через официальный канал."
+              placeholder="Например: Я завершаю разговор и перезваниваю в банк по официальному номеру."
             />
             <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
               Отправить
@@ -585,10 +588,10 @@ function App() {
         <section className="panel panel-wide" id="cases">
           <div className="section-heading">
             <div>
-              <p className="section-label">Разбор ситуаций</p>
-              <h2>Выбирайте безопасные действия в реалистичных сценариях</h2>
+              <p className="section-label">Сценарии</p>
+              <h2>Тренируйтесь на реалистичных примерах и фиксируйте уязвимости</h2>
             </div>
-            <p className="section-note">Каждое рискованное решение попадает в личную карту уязвимостей.</p>
+            <p className="section-note">Каждое рискованное действие попадает в вашу личную карту ошибок.</p>
           </div>
 
           <div className="training-layout">
@@ -630,7 +633,7 @@ function App() {
                 {scenarioTimeline.map(({ stage, result }) => (
                   <div className="timeline-entry" key={stage.id}>
                     <div className="message-bubble message-bubble--scammer">
-                      <span className="message-role">Мошенник</span>
+                      <span className="message-role">Собеседник</span>
                       <p>{stage.message}</p>
                     </div>
 
@@ -697,6 +700,23 @@ function App() {
           </div>
         </section>
 
+        <section className="panel" id="tips">
+          <div className="section-heading">
+            <div>
+              <p className="section-label">Цитируемые советы</p>
+              <h2>Короткая база формулировок, которые стоит держать под рукой</h2>
+            </div>
+            <p className="section-note">Без интерпретаций: только прямые, знакомые рекомендации по кибергигиене.</p>
+          </div>
+          <div className="quotes-grid">
+            {safetyQuotes.map((quote) => (
+              <blockquote className="quote-card" key={quote}>
+                {quote}
+              </blockquote>
+            ))}
+          </div>
+        </section>
+
         <section className="panel" id="progress">
           <div className="section-heading">
             <div>
@@ -714,15 +734,15 @@ function App() {
             </article>
 
             <article className="progress-card">
-              <span>Диалоги с ИИ</span>
+              <span>Диалоги</span>
               <strong>{progress.chatSessionsCount}</strong>
-              <p>Учебных диалогов с обратной связью.</p>
+              <p>Тренировочных сессий с обратной связью.</p>
             </article>
 
             <article className="progress-card">
               <span>Последняя активность</span>
               <strong>{formatRelative(progress.lastVisitedAt)}</strong>
-              <p>Обновляется после выбора в сценариях и после ответов в чате.</p>
+              <p>Обновляется после выбора в сценариях и ответов в диалоге.</p>
             </article>
           </div>
 
