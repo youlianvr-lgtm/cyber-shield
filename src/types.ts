@@ -1,4 +1,4 @@
-export type DangerLevel = 'low' | 'medium' | 'high'
+﻿export type DangerLevel = 'low' | 'medium' | 'high'
 
 export type RecognitionCard = {
   title: string
@@ -29,7 +29,7 @@ export type Scenario = {
   title: string
   category: string
   intro: string
-  difficulty: 'Легко' | 'Средне' | 'Сложно'
+  difficulty: string
   tags: string[]
   stages: ScenarioStage[]
   summary: string
@@ -84,7 +84,7 @@ export type ChatApiResponse = {
   riskLevel: DangerLevel
   conversationEnded: boolean
   userVerdict: string
-  userWasSafe: boolean
+  userWasSafe: boolean | null
   mistakeTag: string | null
   simulatedCode: string | null
 }

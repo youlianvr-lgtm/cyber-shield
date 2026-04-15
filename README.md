@@ -1,15 +1,13 @@
-# Cyber Shield
+﻿# Cyber Shield
 
-Учебное веб-приложение для конкурса "КиберПраво: твой щит в сети". Проект помогает распознавать мошеннические сценарии через карточки с признаками, интерактивные тренировки и ИИ-чат с разбором тактик злоумышленника.
+Учебное веб-приложение для тренировки распознавания мошеннических сценариев: сигналы риска, сценарные тренировки и интерактивный чат с разбором.
 
-## Что уже есть
+## Стек
 
-- `React + Vite + TypeScript` фронтенд под `GitHub Pages`
-- локальное сохранение прогресса в `localStorage`
-- 4 сценарных тренировки с ветвлением
-- двухпанельный ИИ-чат: диалог + объяснение красных флагов
-- `Cloudflare Worker` для безопасного вызова `Groq API`
-- GitHub Actions workflow для публикации в `GitHub Pages`
+- React + Vite + TypeScript
+- Локальное хранение прогресса в `localStorage`
+- Cloudflare Worker для проксирования AI-диалога
+- GitHub Pages для публикации фронтенда
 
 ## Локальный запуск
 
@@ -18,72 +16,40 @@ npm install
 npm run dev
 ```
 
-Файл `.env` для фронтенда:
+Фронтенд использует переменную окружения:
 
 ```bash
 VITE_CHAT_API_URL=https://your-worker-subdomain.workers.dev/api/chat
 ```
 
-Если `VITE_CHAT_API_URL` не задан, приложение покажет интерфейс чата, но без живых ответов от ИИ.
+Если переменная не указана, UI чата работает в режиме без живых ответов.
 
-## Cloudflare Worker
-
-1. Установить аутентификацию:
-
-```bash
-npx wrangler login
-```
-
-2. Скопировать `worker/.dev.vars.example` в `worker/.dev.vars` и заполнить:
-
-```bash
-GROQ_API_KEY=...
-ALLOWED_ORIGIN=https://your-user.github.io
-GROQ_MODEL=llama-3.1-8b-instant
-```
-
-3. Запустить локально:
+## Worker (опционально)
 
 ```bash
 npm run dev:worker
-```
-
-4. Задеплоить:
-
-```bash
 npm run deploy:worker
 ```
 
-Worker использует `POST /api/chat` и `GET /health`.
+Локальные секреты: `worker/.dev.vars` (на основе `worker/.dev.vars.example`).
 
-## GitHub Pages
-
-Workflow уже добавлен в `.github/workflows/deploy-pages.yml`.
-
-Чтобы публикация заработала:
-
-1. В репозитории открыть `Settings -> Pages`.
-2. Источник выставить на `GitHub Actions`.
-3. Запушить ветку `master`.
-
-## Переменные и секреты
-
-- Фронтенд: `.env` на основе `.env.example`
-- Worker локально: `worker/.dev.vars`
-- Worker в Cloudflare:
-
-```bash
-npx wrangler secret put GROQ_API_KEY --config worker/wrangler.toml
-```
-
-Также нужно задать обычные переменные окружения Worker:
-
-- `ALLOWED_ORIGIN`
-- `GROQ_MODEL` опционально
-
-## Проверка
+## Проверка перед публикацией
 
 ```bash
 npm run lint
 npm run build
 ```
+
+## Публикация в GitHub Pages
+
+Workflow расположен в `.github/workflows/deploy-pages.yml` и запускается при пуше в ветку `main`.
+
+В настройках репозитория:
+
+1. Откройте `Settings -> Pages`.
+2. Выберите источник `GitHub Actions`.
+
+## Ветки
+
+- Основная ветка проекта: `main`
+- `master` используется только как архивная/историческая
