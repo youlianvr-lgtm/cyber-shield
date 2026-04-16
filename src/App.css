@@ -782,3 +782,222 @@
     max-width: 32ch;
   }
 }
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: block;
+}
+
+.brand-name {
+  font-weight: 800;
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+}
+
+.hero-copy .brand-name {
+  font-size: 0.88rem;
+  letter-spacing: 0.12em;
+}
+
+.mobile-header .brand-name {
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+}
+
+.chat-banner--compact {
+  margin-top: 0;
+}
+
+.scenario-list--tests {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+  .scenario-list--tests {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.scenario-item {
+  display: block;
+}
+
+.scenario-button--test {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fff;
+  text-align: left;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+.scenario-button--test:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(185, 203, 220, 0.8);
+}
+
+.scenario-index {
+  min-width: 2.2ch;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.scenario-main strong,
+.scenario-main small {
+  display: block;
+}
+
+.scenario-main small {
+  margin-top: 3px;
+  color: var(--text-soft);
+}
+
+.scenario-status {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: #eef2f6;
+  border: 1px solid rgba(185, 203, 220, 0.7);
+}
+
+.scenario-status--current {
+  background: rgba(33, 90, 138, 0.08);
+  border-color: rgba(33, 90, 138, 0.32);
+}
+
+.scenario-status--done {
+  background: rgba(15, 118, 110, 0.08);
+  border-color: rgba(15, 118, 110, 0.32);
+}
+
+.scenario-status--locked {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.55);
+  color: rgba(15, 23, 42, 0.72);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(8px);
+}
+
+.modal-content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(880px, calc(100vw - 28px));
+  max-height: min(82vh, 860px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid rgba(215, 225, 235, 0.9);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  background: linear-gradient(180deg, rgba(33, 90, 138, 0.06), rgba(255, 255, 255, 0));
+}
+
+.modal-intro {
+  margin-top: 6px;
+  color: var(--text-soft);
+}
+
+.icon-button {
+  min-height: 42px;
+  min-width: 42px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text);
+  font-weight: 900;
+  font-size: 1.25rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-body {
+  padding: 16px 18px 18px;
+  overflow: auto;
+}
+
+.scenario-summary--modal {
+  margin-top: 12px;
+}
+
+.modal-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.modal-footer {
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--line);
+  background: rgba(246, 248, 251, 0.72);
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 12px;
+}
+
+@media (max-width: 719px) {
+  .modal-content {
+    inset: 0;
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100vw;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay {
+    backdrop-filter: none;
+  }
+}

@@ -1,24 +1,25 @@
 ﻿@import url('https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
 :root {
-  --bg: #f3f6f8;
-  --bg-soft: #e9eef2;
-  --surface: rgba(255, 255, 255, 0.92);
+  --bg: #f6f8fb;
+  --bg-soft: #edf2f7;
+  --surface: #ffffff;
   --surface-strong: #ffffff;
-  --line: #d8e2ea;
-  --line-strong: #bfd1df;
-  --text: #1c2e3d;
-  --text-soft: #556b7d;
-  --accent: #0f67a5;
-  --accent-strong: #0b4f80;
-  --warning: #b15418;
-  --success: #1e7d5b;
-  --shadow: 0 14px 34px rgba(17, 42, 64, 0.09);
+  --line: #d7e1eb;
+  --line-strong: #b9cbdc;
+  --text: #0f172a;
+  --text-soft: #3a5368;
+  --accent: #215a8a;
+  --accent-strong: #183f60;
+  --warning: #b45309;
+  --success: #0f766e;
+  --shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
 
   font-family: 'Onest', 'Segoe UI', sans-serif;
-  line-height: 1.5;
+  line-height: 1.55;
   font-weight: 500;
   color: var(--text-soft);
+  font-size-adjust: 0.52;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -39,8 +40,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 10% 0%, rgba(15, 103, 165, 0.14), transparent 34%),
-    radial-gradient(circle at 95% 5%, rgba(177, 84, 24, 0.1), transparent 26%),
+    radial-gradient(circle at 12% 0%, rgba(33, 90, 138, 0.12), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(15, 118, 110, 0.08), transparent 28%),
     linear-gradient(180deg, var(--bg), var(--bg-soft));
 }
 
@@ -77,19 +78,19 @@ strong {
 
 h1 {
   font-size: clamp(2.1rem, 8.4vw, 4.7rem);
-  line-height: 0.97;
+  line-height: 0.98;
   letter-spacing: -0.035em;
 }
 
 h2 {
   font-size: clamp(1.5rem, 5.6vw, 2.5rem);
-  line-height: 1.04;
+  line-height: 1.08;
   letter-spacing: -0.03em;
 }
 
 h3 {
   font-size: clamp(1.12rem, 3.2vw, 1.5rem);
-  line-height: 1.12;
+  line-height: 1.15;
   letter-spacing: -0.02em;
 }
 

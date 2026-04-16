@@ -1,5 +1,6 @@
 ﻿import { startTransition, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import './App.css'
 import {
   chatDifficulties,
@@ -215,9 +216,12 @@ const normalizeHash = (hash: string) => hash.replace(/^#/, '').trim().toLowerCas
 
 function App() {
   const [progress, setProgress] = useState<ProgressState>(() => loadProgress())
-  const [activeScenarioId, setActiveScenarioId] = useState(scenarios[0].id)
-  const [currentStageId, setCurrentStageId] = useState<string | null>(scenarios[0].stages[0].id)
-  const [choiceResults, setChoiceResults] = useState<ChoiceResult[]>([])
+  const [scenarioModalOpen, setScenarioModalOpen] = useState(false)
+  const [scenarioModalScenarioId, setScenarioModalScenarioId] = useState(scenarios[0].id)
+  const [scenarioStageId, setScenarioStageId] = useState<string | null>(scenarios[0].stages[0].id)
+  const [scenarioChoiceResults, setScenarioChoiceResults] = useState<ChoiceResult[]>([])
+  const [scenarioReviewExpanded, setScenarioReviewExpanded] = useState(true)
+  const [lockedScenarioNotice, setLockedScenarioNotice] = useState('')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => initialChatMessages())
   const [chatInput, setChatInput] = useState('')
   const [chatInsight, setChatInsight] = useState<ChatInsight>(initialInsight)
@@ -256,35 +260,47 @@ function App() {
     }
   }, [isMobile])
 
-  const selectedScenario = getScenarioById(activeScenarioId)
-  const scenarioCompleted = currentStageId === null
-  const safeChoices = choiceResults.filter((item) => item.outcome === 'safe').length
-  const currentRunScore = choiceResults.length ? Math.round((safeChoices / choiceResults.length) * 100) : 0
+  const firstUncompletedScenarioIndex = scenarios.findIndex(
+    (scenario) => !progress.completedScenarioIds.includes(scenario.id),
+  )
+  const currentScenarioIndex =
+    firstUncompletedScenarioIndex === -1 ? scenarios.length - 1 : firstUncompletedScenarioIndex
+
+  const modalScenario = getScenarioById(scenarioModalScenarioId)
+  const modalScenarioIndex = scenarios.findIndex((scenario) => scenario.id === modalScenario.id)
+  const modalScenarioCompleted = progress.completedScenarioIds.includes(modalScenario.id)
+  const scenarioFinished = scenarioStageId === null
+  const safeChoices = scenarioChoiceResults.filter((item) => item.outcome === 'safe').length
+  const currentRunScore = scenarioChoiceResults.length
+    ? Math.round((safeChoices / scenarioChoiceResults.length) * 100)
+    : 0
   const topMistakes = Object.entries(progress.mistakeTagsCount)
     .sort((left, right) => right[1] - left[1])
     .slice(0, 3)
 
-  const scenarioTimeline = selectedScenario.stages
+  const scenarioTimeline = modalScenario.stages
     .map((stage) => ({
       stage,
-      result: choiceResults.find((item) => item.stageId === stage.id),
+      result: scenarioChoiceResults.find((item) => item.stageId === stage.id),
     }))
-    .filter(({ stage, result }) => stage.id === currentStageId || result)
+    .filter(({ stage, result }) => stage.id === scenarioStageId || result)
 
-  const chooseScenario = (scenarioId: string) => {
+  const openScenarioModal = (scenarioId: string) => {
     const scenario = getScenarioById(scenarioId)
     startTransition(() => {
-      setActiveScenarioId(scenario.id)
-      setCurrentStageId(scenario.stages[0].id)
-      setChoiceResults([])
+      setScenarioModalScenarioId(scenario.id)
+      setScenarioStageId(scenario.stages[0].id)
+      setScenarioChoiceResults([])
+      setScenarioReviewExpanded(true)
+      setScenarioModalOpen(true)
     })
   }
 
-  const registerProgressUpdate = (choice: ScenarioChoice, finished: boolean) => {
+  const registerProgressUpdate = (scenarioId: string, choice: ScenarioChoice, finished: boolean) => {
     setProgress((previous) => {
       const completedScenarioIds =
-        finished && !previous.completedScenarioIds.includes(selectedScenario.id)
-          ? [...previous.completedScenarioIds, selectedScenario.id]
+        finished && !previous.completedScenarioIds.includes(scenarioId)
+          ? [...previous.completedScenarioIds, scenarioId]
           : previous.completedScenarioIds
 
       return {
@@ -297,7 +313,7 @@ function App() {
   }
 
   const handleChoice = (stage: ScenarioStage, choice: ScenarioChoice) => {
-    if (choiceResults.some((item) => item.stageId === stage.id)) {
+    if (scenarioChoiceResults.some((item) => item.stageId === stage.id)) {
       return
     }
 
@@ -310,18 +326,62 @@ function App() {
     }
 
     startTransition(() => {
-      setChoiceResults((previous) => [...previous, result])
-      setCurrentStageId(choice.nextStageId ?? null)
+      setScenarioChoiceResults((previous) => [...previous, result])
+      setScenarioStageId(choice.nextStageId ?? null)
+      if (!choice.nextStageId) {
+        setScenarioReviewExpanded(false)
+      }
     })
 
-    registerProgressUpdate(choice, !choice.nextStageId)
+    registerProgressUpdate(modalScenario.id, choice, !choice.nextStageId)
   }
 
-  const resetScenario = () => {
+  const resetScenarioRun = () => {
     startTransition(() => {
-      setChoiceResults([])
-      setCurrentStageId(selectedScenario.stages[0].id)
+      setScenarioChoiceResults([])
+      setScenarioStageId(modalScenario.stages[0].id)
+      setScenarioReviewExpanded(true)
     })
+  }
+
+  const openNextScenario = () => {
+    if (modalScenarioIndex === scenarios.length - 1) {
+      setScenarioModalOpen(false)
+      if (isMobile) {
+        setMainTab('progress')
+        if (typeof window !== 'undefined' && typeof window.history?.replaceState === 'function') {
+          window.history.replaceState(null, '', '#progress')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        return
+      }
+
+      if (typeof window !== 'undefined') {
+        window.location.hash = '#progress'
+        document.querySelector('#progress')?.scrollIntoView({ behavior: 'smooth' })
+      }
+      return
+    }
+
+    const isRetake = modalScenarioIndex < currentScenarioIndex
+    const nextIndex = isRetake
+      ? currentScenarioIndex
+      : Math.min(currentScenarioIndex + 1, scenarios.length - 1)
+    openScenarioModal(scenarios[nextIndex].id)
+  }
+
+  const handleScenarioModalOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      const hasStarted = scenarioStageId !== null && scenarioChoiceResults.length > 0
+      if (hasStarted && !scenarioFinished) {
+        const confirmed = window.confirm('Тест не завершен. Закрыть и потерять прогресс?')
+        if (!confirmed) {
+          return
+        }
+      }
+    }
+
+    setScenarioModalOpen(nextOpen)
   }
 
   const resetChat = () => {
@@ -625,11 +685,134 @@ function App() {
     </section>
   )
 
+  const renderScenarioModal = () => (
+    <Dialog.Root open={scenarioModalOpen} onOpenChange={handleScenarioModalOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="modal-overlay" />
+        <Dialog.Content className="modal-content" aria-label={`Тест: ${modalScenario.title}`}>
+          <div className="modal-header">
+            <div>
+              <p className="section-label">
+                Тест {modalScenarioIndex + 1} из {scenarios.length}
+                {modalScenarioCompleted ? ' · пройден' : ''}
+              </p>
+              <h3>{modalScenario.title}</h3>
+              <p className="modal-intro">{modalScenario.intro}</p>
+            </div>
+            <Dialog.Close asChild>
+              <button className="icon-button" type="button" aria-label="Закрыть окно">
+                <span aria-hidden="true">×</span>
+              </button>
+            </Dialog.Close>
+          </div>
+
+          <div className="modal-body">
+            {!scenarioFinished || scenarioReviewExpanded ? (
+              <div className="timeline">
+                {scenarioTimeline.map(({ stage, result }) => (
+                  <div className="timeline-entry" key={stage.id}>
+                    <div className="message-bubble message-bubble--scammer">
+                      <span className="message-role">Собеседник</span>
+                      <p>{stage.message}</p>
+                    </div>
+
+                    {result ? (
+                      <>
+                        <div className="message-bubble message-bubble--user">
+                          <span className="message-role">Ваш ответ</span>
+                          <p>{stage.choices.find((choice) => choice.id === result.choiceId)?.label}</p>
+                        </div>
+
+                        <div
+                          className={`feedback-card ${
+                            result.outcome === 'safe' ? 'feedback-card--safe' : 'feedback-card--risk'
+                          }`}
+                        >
+                          <strong>{result.outcome === 'safe' ? 'Безопасное решение' : 'Рискованное решение'}</strong>
+                          <p>{result.explanation}</p>
+                          <span>{result.coachTip}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="choice-panel">
+                        <p className="choice-prompt">{stage.prompt}</p>
+                        <div className="red-flag-row">
+                          {stage.redFlags.map((flag) => (
+                            <span className="red-flag-pill" key={flag}>
+                              {flag}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="choice-list">
+                          {stage.choices.map((choice) => (
+                            <button
+                              className="choice-button"
+                              key={choice.id}
+                              onClick={() => handleChoice(stage, choice)}
+                              type="button"
+                            >
+                              {choice.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {scenarioFinished ? (
+              <div className="scenario-summary scenario-summary--modal">
+                <div>
+                  <p className="section-label">Итог</p>
+                  <h3>{currentRunScore}% безопасных решений</h3>
+                  <p>{modalScenario.summary}</p>
+                </div>
+                <div className="summary-tags">
+                  {modalScenario.tags.map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {scenarioFinished ? (
+              <div className="modal-actions">
+                <button
+                  className="ghost-button"
+                  onClick={() => setScenarioReviewExpanded((previous) => !previous)}
+                  type="button"
+                >
+                  {scenarioReviewExpanded ? 'Скрыть разбор' : 'Показать разбор'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {scenarioFinished ? (
+            <div className="modal-footer">
+              <button className="ghost-button" onClick={resetScenarioRun} type="button">
+                Пройти заново
+              </button>
+              <button className="primary-button" onClick={openNextScenario} type="button">
+                {modalScenarioIndex === scenarios.length - 1 ? 'К итогам' : 'Пройти следующий тест'}
+              </button>
+            </div>
+          ) : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+
   if (isMobile) {
     return (
       <div className="app-shell app-shell--mobile">
         <header className="mobile-header" id="overview">
-          <div className="eyebrow">Cyber Shield</div>
+          <div className="brand">
+            <img className="brand-mark" src="/logo.svg" alt="" aria-hidden="true" />
+            <span className="brand-name">Мошенник.NET</span>
+          </div>
           <h1 className="mobile-title">Тренируйтесь распознавать мошеннические сценарии.</h1>
           <div className="mobile-metrics" aria-label="Ключевые метрики">
             <div className="mini-metric">
@@ -702,111 +885,48 @@ function App() {
                   <p className="section-note">Выбирайте вариант ответа и смотрите последствия.</p>
                 </div>
 
-                <div className="training-layout">
-                  <aside className="scenario-list">
-                    {scenarios.map((scenario) => {
-                      const isActive = scenario.id === selectedScenario.id
-                      const isCompleted = progress.completedScenarioIds.includes(scenario.id)
-                      return (
-                        <button
-                          key={scenario.id}
-                          className={`scenario-button${isActive ? ' active' : ''}`}
-                          onClick={() => chooseScenario(scenario.id)}
-                          type="button"
-                        >
-                          <span className="scenario-category">{scenario.category}</span>
-                          <strong>{scenario.title}</strong>
-                          <small>
-                            {scenario.difficulty}
-                            {isCompleted ? ' · изучено' : ''}
-                          </small>
-                        </button>
-                      )
-                    })}
-                  </aside>
-
-                  <div className="scenario-workspace">
-                    <div className="scenario-header">
-                      <div>
-                        <p className="section-label">{selectedScenario.category}</p>
-                        <h3>{selectedScenario.title}</h3>
-                        <p>{selectedScenario.intro}</p>
-                      </div>
-                      <button className="ghost-button" onClick={resetScenario} type="button">
-                        Пройти заново
-                      </button>
-                    </div>
-
-                    <div className="timeline">
-                      {scenarioTimeline.map(({ stage, result }) => (
-                        <div className="timeline-entry" key={stage.id}>
-                          <div className="message-bubble message-bubble--scammer">
-                            <span className="message-role">Собеседник</span>
-                            <p>{stage.message}</p>
-                          </div>
-
-                          {result ? (
-                            <>
-                              <div className="message-bubble message-bubble--user">
-                                <span className="message-role">Ваш ответ</span>
-                                <p>{stage.choices.find((choice) => choice.id === result.choiceId)?.label}</p>
-                              </div>
-
-                              <div
-                                className={`feedback-card ${
-                                  result.outcome === 'safe' ? 'feedback-card--safe' : 'feedback-card--risk'
-                                }`}
-                              >
-                                <strong>
-                                  {result.outcome === 'safe' ? 'Безопасное решение' : 'Рискованное решение'}
-                                </strong>
-                                <p>{result.explanation}</p>
-                                <span>{result.coachTip}</span>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="choice-panel">
-                              <p className="choice-prompt">{stage.prompt}</p>
-                              <div className="red-flag-row">
-                                {stage.redFlags.map((flag) => (
-                                  <span className="red-flag-pill" key={flag}>
-                                    {flag}
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="choice-list">
-                                {stage.choices.map((choice) => (
-                                  <button
-                                    className="choice-button"
-                                    key={choice.id}
-                                    onClick={() => handleChoice(stage, choice)}
-                                    type="button"
-                                  >
-                                    {choice.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {scenarioCompleted ? (
-                      <div className="scenario-summary">
-                        <div>
-                          <p className="section-label">Итог</p>
-                          <h3>{currentRunScore}% безопасных решений</h3>
-                          <p>{selectedScenario.summary}</p>
-                        </div>
-                        <div className="summary-tags">
-                          {selectedScenario.tags.map((tag) => (
-                            <span key={tag}>{tag}</span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
+                {lockedScenarioNotice ? (
+                  <div className="chat-banner chat-banner--compact" role="status">
+                    {lockedScenarioNotice}
                   </div>
+                ) : null}
+
+                <div className="scenario-list scenario-list--tests" aria-label="Список тестов">
+                  {scenarios.map((scenario, index) => {
+                    const isCompleted = progress.completedScenarioIds.includes(scenario.id)
+                    const isCurrent = index === currentScenarioIndex
+                    const isAvailable = index <= currentScenarioIndex
+                    const statusLabel = isCompleted ? 'Пройден' : isCurrent ? 'Текущий' : 'Заблокирован'
+                    const statusTone = isCompleted ? 'done' : isCurrent ? 'current' : 'locked'
+                    const isSelected = scenarioModalOpen ? scenario.id === modalScenario.id : isCurrent
+
+                    const handleLockedAttempt = () => {
+                      if (isAvailable) {
+                        return
+                      }
+
+                      setLockedScenarioNotice('Завершите предыдущий тест, чтобы открыть этот.')
+                      window.setTimeout(() => setLockedScenarioNotice(''), 2400)
+                    }
+
+                    return (
+                      <div className="scenario-item" key={scenario.id} onClick={handleLockedAttempt}>
+                        <button
+                          className={`scenario-button scenario-button--test${isSelected ? ' active' : ''}`}
+                          onClick={isAvailable ? () => openScenarioModal(scenario.id) : undefined}
+                          type="button"
+                          disabled={!isAvailable}
+                        >
+                          <span className="scenario-index">{index + 1}</span>
+                          <span className="scenario-main">
+                            <strong>{scenario.title}</strong>
+                            <small>{scenario.difficulty}</small>
+                          </span>
+                          <span className={`scenario-status scenario-status--${statusTone}`}>{statusLabel}</span>
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </section>
             </div>
@@ -903,6 +1023,8 @@ function App() {
             Прогресс
           </button>
         </nav>
+
+        {renderScenarioModal()}
       </div>
     )
   }
@@ -919,7 +1041,10 @@ function App() {
         </nav>
 
         <div className="hero-copy">
-          <div className="eyebrow">Cyber Shield</div>
+          <div className="brand">
+            <img className="brand-mark" src="/logo.svg" alt="" aria-hidden="true" />
+            <span className="brand-name">Мошенник.NET</span>
+          </div>
           <h1>Распознавайте схему до того, как от вас попросят данные или деньги.</h1>
           <p className="hero-lead">
             Практический тренажер: сигналы риска, диалог с имитацией давления, сценарии с разбором ошибок.
@@ -1111,109 +1236,48 @@ function App() {
             <p className="section-note">Каждое рискованное действие попадает в вашу личную карту ошибок.</p>
           </div>
 
-          <div className="training-layout">
-            <aside className="scenario-list">
-              {scenarios.map((scenario) => {
-                const isActive = scenario.id === selectedScenario.id
-                const isCompleted = progress.completedScenarioIds.includes(scenario.id)
-                return (
-                  <button
-                    key={scenario.id}
-                    className={`scenario-button${isActive ? ' active' : ''}`}
-                    onClick={() => chooseScenario(scenario.id)}
-                    type="button"
-                  >
-                    <span className="scenario-category">{scenario.category}</span>
-                    <strong>{scenario.title}</strong>
-                    <small>
-                      {scenario.difficulty}
-                      {isCompleted ? ' · изучено' : ''}
-                    </small>
-                  </button>
-                )
-              })}
-            </aside>
-
-            <div className="scenario-workspace">
-              <div className="scenario-header">
-                <div>
-                  <p className="section-label">{selectedScenario.category}</p>
-                  <h3>{selectedScenario.title}</h3>
-                  <p>{selectedScenario.intro}</p>
-                </div>
-                <button className="ghost-button" onClick={resetScenario} type="button">
-                  Пройти заново
-                </button>
-              </div>
-
-              <div className="timeline">
-                {scenarioTimeline.map(({ stage, result }) => (
-                  <div className="timeline-entry" key={stage.id}>
-                    <div className="message-bubble message-bubble--scammer">
-                      <span className="message-role">Собеседник</span>
-                      <p>{stage.message}</p>
-                    </div>
-
-                    {result ? (
-                      <>
-                        <div className="message-bubble message-bubble--user">
-                          <span className="message-role">Ваш ответ</span>
-                          <p>{stage.choices.find((choice) => choice.id === result.choiceId)?.label}</p>
-                        </div>
-
-                        <div
-                          className={`feedback-card ${
-                            result.outcome === 'safe' ? 'feedback-card--safe' : 'feedback-card--risk'
-                          }`}
-                        >
-                          <strong>{result.outcome === 'safe' ? 'Безопасное решение' : 'Рискованное решение'}</strong>
-                          <p>{result.explanation}</p>
-                          <span>{result.coachTip}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="choice-panel">
-                        <p className="choice-prompt">{stage.prompt}</p>
-                        <div className="red-flag-row">
-                          {stage.redFlags.map((flag) => (
-                            <span className="red-flag-pill" key={flag}>
-                              {flag}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="choice-list">
-                          {stage.choices.map((choice) => (
-                            <button
-                              className="choice-button"
-                              key={choice.id}
-                              onClick={() => handleChoice(stage, choice)}
-                              type="button"
-                            >
-                              {choice.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {scenarioCompleted ? (
-                <div className="scenario-summary">
-                  <div>
-                    <p className="section-label">Итог</p>
-                    <h3>{currentRunScore}% безопасных решений</h3>
-                    <p>{selectedScenario.summary}</p>
-                  </div>
-                  <div className="summary-tags">
-                    {selectedScenario.tags.map((tag) => (
-                      <span key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
+          {lockedScenarioNotice ? (
+            <div className="chat-banner chat-banner--compact" role="status">
+              {lockedScenarioNotice}
             </div>
+          ) : null}
+
+          <div className="scenario-list scenario-list--tests" aria-label="Список тестов">
+            {scenarios.map((scenario, index) => {
+              const isCompleted = progress.completedScenarioIds.includes(scenario.id)
+              const isCurrent = index === currentScenarioIndex
+              const isAvailable = index <= currentScenarioIndex
+              const statusLabel = isCompleted ? 'Пройден' : isCurrent ? 'Текущий' : 'Заблокирован'
+              const statusTone = isCompleted ? 'done' : isCurrent ? 'current' : 'locked'
+              const isSelected = scenarioModalOpen ? scenario.id === modalScenario.id : isCurrent
+
+              const handleLockedAttempt = () => {
+                if (isAvailable) {
+                  return
+                }
+
+                setLockedScenarioNotice('Завершите предыдущий тест, чтобы открыть этот.')
+                window.setTimeout(() => setLockedScenarioNotice(''), 2400)
+              }
+
+              return (
+                <div className="scenario-item" key={scenario.id} onClick={handleLockedAttempt}>
+                  <button
+                    className={`scenario-button scenario-button--test${isSelected ? ' active' : ''}`}
+                    onClick={isAvailable ? () => openScenarioModal(scenario.id) : undefined}
+                    type="button"
+                    disabled={!isAvailable}
+                  >
+                    <span className="scenario-index">{index + 1}</span>
+                    <span className="scenario-main">
+                      <strong>{scenario.title}</strong>
+                      <small>{scenario.difficulty}</small>
+                    </span>
+                    <span className={`scenario-status scenario-status--${statusTone}`}>{statusLabel}</span>
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </section>
 
@@ -1286,6 +1350,8 @@ function App() {
           </div>
         </section>
       </main>
+
+      {renderScenarioModal()}
     </div>
   )
 }
