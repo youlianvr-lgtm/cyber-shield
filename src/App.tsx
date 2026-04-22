@@ -12,8 +12,10 @@ import {
 import { loadProgress, saveProgress } from './lib/storage'
 import type {
   ChatApiResponse,
+  ChatInputMode,
   ChatInsight,
   ChatMessage,
+  ChatTechnique,
   ChoiceResult,
   ProgressState,
   ScenarioChoice,
@@ -21,16 +23,31 @@ import type {
 } from './types'
 
 type MainTab = 'learn' | 'chat' | 'cases' | 'progress'
-type ChatTab = 'dialog' | 'coach'
+
+type LocalChatEvaluation = {
+  userWasSafe: boolean | null
+  userVerdict: string
+  mistakeTag: string | null
+  inputMode: ChatInputMode
+}
+
+const inputModeLabels: Record<ChatInputMode, string> = {
+  speech: 'реплика',
+  action: 'действие',
+  mixed: 'смешанный ответ',
+  unclear: 'неясная формулировка',
+}
 
 const initialInsight: ChatInsight = {
   redFlags: ['Неожиданный контакт', 'Давление срочностью', 'Запрос чувствительных данных'],
-  coachNote: 'После ответа появится разбор и уязвимости в вашей формулировке.',
+  techniques: [],
+  coachNote: 'После ответа появится разбор техник давления и уязвимостей в вашей формулировке.',
   riskLevel: 'medium',
   conversationEnded: false,
   userVerdict: 'Оценка появится после вашей первой реплики.',
   userWasSafe: null,
   mistakeTag: null,
+  inputMode: 'unclear',
   simulatedCode: null,
 }
 
@@ -78,6 +95,31 @@ const getScenarioById = (scenarioId: string) =>
 
 const normalizeMessage = (message: string) => message.toLowerCase().replace(/\s+/g, ' ').trim()
 
+const normalizeTechniques = (value: unknown): ChatTechnique[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null
+      }
+
+      const technique = item as Partial<ChatTechnique>
+      if (typeof technique.title !== 'string' || typeof technique.description !== 'string') {
+        return null
+      }
+
+      return {
+        title: technique.title.trim(),
+        description: technique.description.trim(),
+      }
+    })
+    .filter((item): item is ChatTechnique => Boolean(item))
+    .slice(0, 4)
+}
+
 const safeReplyPatterns = [
   /не\s+(буду|стану|собираюсь)\s+(говорить|диктовать|сообщать|называть|отправлять|вводить)/i,
   /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/i,
@@ -90,6 +132,18 @@ const safeReplyPatterns = [
   /блокирую\s+(номер|контакт)/i,
   /отказываюсь/i,
   /откажусь/i,
+]
+
+const actionMarkers = [
+  /\b(перезвоню|позвоню|проверю|завершу|завершаю|прекращаю|кладу трубку|блокирую|переведу|перевожу|перейду|открою|введу|диктую|продиктую|подтвержу|выполню|продолжу)\b/i,
+  /\b(отправлю|сообщу)\b.{0,24}\b(код|смс|данные|деньги|карту|cvv)\b/i,
+]
+
+const speechMarkers = [
+  /^[«"]/,
+  /[?!]$/,
+  /\b(скажу|отвечу|отвечаю|говорю|спрошу|напишу|пишу)\b/i,
+  /^(нет|кто вы|зачем|почему|с какой стати|подождите)/i,
 ]
 
 const negatedRiskPatterns = [
@@ -122,8 +176,33 @@ const riskyReplyPatterns = [
   },
 ]
 
-const evaluateReplyLocally = (message: string) => {
+const detectInputModeLocally = (message: string): ChatInputMode => {
   const normalizedMessage = normalizeMessage(message)
+  if (!normalizedMessage) {
+    return 'unclear'
+  }
+
+  const hasAction = actionMarkers.some((pattern) => pattern.test(normalizedMessage))
+  const hasSpeech = speechMarkers.some((pattern) => pattern.test(message.trim()))
+
+  if (hasAction && hasSpeech) {
+    return 'mixed'
+  }
+
+  if (hasAction) {
+    return 'action'
+  }
+
+  if (hasSpeech) {
+    return 'speech'
+  }
+
+  return 'unclear'
+}
+
+const evaluateReplyLocally = (message: string): LocalChatEvaluation | null => {
+  const normalizedMessage = normalizeMessage(message)
+  const inputMode = detectInputModeLocally(message)
 
   if (!normalizedMessage) {
     return null
@@ -135,6 +214,7 @@ const evaluateReplyLocally = (message: string) => {
       userVerdict:
         'Безопасная реакция: вы не приняли правила мошенника и перевели проверку в независимый канал.',
       mistakeTag: null,
+      inputMode,
     }
   }
 
@@ -144,6 +224,7 @@ const evaluateReplyLocally = (message: string) => {
       userVerdict:
         'Ответ выглядит осторожным: вы отказываетесь от рискованных действий и сохраняете контроль над ситуацией.',
       mistakeTag: null,
+      inputMode,
     }
   }
 
@@ -154,29 +235,65 @@ const evaluateReplyLocally = (message: string) => {
       userVerdict:
         'Рискованный ответ: вы начинаете действовать по сценарию мошенника вместо независимой проверки.',
       mistakeTag: riskyMatch.mistakeTag,
+      inputMode,
+    }
+  }
+
+  if (/\?/.test(normalizedMessage) || /\b(подождите|секунду|подумаю|уточню)\b/i.test(normalizedMessage)) {
+    return {
+      userWasSafe: null,
+      userVerdict:
+        'Пока это выглядит как вопрос, пауза или сомнение. Ошибка не фиксируется, пока вы не совершили опасный шаг.',
+      mistakeTag: null,
+      inputMode,
     }
   }
 
   return null
 }
 
-const isChatApiResponse = (value: unknown): value is ChatApiResponse => {
+const normalizeChatApiResponse = (value: unknown): ChatApiResponse | null => {
   if (!value || typeof value !== 'object') {
-    return false
+    return null
   }
 
   const response = value as Partial<ChatApiResponse>
-  return (
-    typeof response.assistantReply === 'string' &&
-    Array.isArray(response.redFlags) &&
-    typeof response.coachNote === 'string' &&
-    typeof response.riskLevel === 'string' &&
-    typeof response.conversationEnded === 'boolean' &&
-    typeof response.userVerdict === 'string' &&
-    (typeof response.userWasSafe === 'boolean' || response.userWasSafe === null) &&
-    (typeof response.mistakeTag === 'string' || response.mistakeTag === null) &&
-    (typeof response.simulatedCode === 'string' || response.simulatedCode === null)
-  )
+  if (
+    typeof response.assistantReply !== 'string' ||
+    !Array.isArray(response.redFlags) ||
+    typeof response.coachNote !== 'string' ||
+    typeof response.riskLevel !== 'string' ||
+    typeof response.conversationEnded !== 'boolean' ||
+    typeof response.userVerdict !== 'string' ||
+    (typeof response.userWasSafe !== 'boolean' && response.userWasSafe !== null) ||
+    (typeof response.mistakeTag !== 'string' && response.mistakeTag !== null) ||
+    (typeof response.simulatedCode !== 'string' && response.simulatedCode !== null)
+  ) {
+    return null
+  }
+
+  return {
+    assistantReply: response.assistantReply,
+    redFlags: response.redFlags.filter((flag): flag is string => typeof flag === 'string'),
+    techniques: normalizeTechniques(response.techniques),
+    coachNote: response.coachNote,
+    riskLevel:
+      response.riskLevel === 'low' || response.riskLevel === 'medium' || response.riskLevel === 'high'
+        ? response.riskLevel
+        : 'medium',
+    conversationEnded: response.conversationEnded,
+    userVerdict: response.userVerdict,
+    userWasSafe: response.userWasSafe,
+    mistakeTag: response.mistakeTag,
+    inputMode:
+      response.inputMode === 'speech' ||
+      response.inputMode === 'action' ||
+      response.inputMode === 'mixed' ||
+      response.inputMode === 'unclear'
+        ? response.inputMode
+        : 'unclear',
+    simulatedCode: response.simulatedCode,
+  }
 }
 
 const useMediaQuery = (query: string) => {
@@ -231,8 +348,9 @@ function App() {
   const [chatError, setChatError] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [chatSessionCounted, setChatSessionCounted] = useState(false)
+  const [chatPendingMistakeTags, setChatPendingMistakeTags] = useState<string[]>([])
+  const [chatMistakesCommitted, setChatMistakesCommitted] = useState(false)
   const [mainTab, setMainTab] = useState<MainTab>('learn')
-  const [chatTab, setChatTab] = useState<ChatTab>('dialog')
   const isMobile = useMediaQuery('(max-width: 719px)')
 
   useEffect(() => {
@@ -391,6 +509,8 @@ function App() {
     setChatError('')
     setIsSending(false)
     setChatSessionCounted(false)
+    setChatPendingMistakeTags([])
+    setChatMistakesCommitted(false)
     setChatSessionId(crypto.randomUUID())
   }
 
@@ -443,51 +563,71 @@ function App() {
       }
 
       const data: unknown = await response.json()
-      if (!isChatApiResponse(data)) {
+      const normalizedResponse = normalizeChatApiResponse(data)
+      if (!normalizedResponse) {
         throw new Error('invalid-payload')
       }
 
-      const localEvaluation = evaluateReplyLocally(trimmed)
-      const resolvedUserWasSafe = localEvaluation?.userWasSafe ?? data.userWasSafe
-      const resolvedMistakeTag = localEvaluation?.mistakeTag ?? data.mistakeTag
+      const localEvaluation =
+        normalizedResponse.userWasSafe === null ? evaluateReplyLocally(trimmed) : null
+      const resolvedInputMode =
+        normalizedResponse.inputMode === 'unclear'
+          ? localEvaluation?.inputMode ?? normalizedResponse.inputMode
+          : normalizedResponse.inputMode
+      const resolvedUserWasSafe = localEvaluation?.userWasSafe ?? normalizedResponse.userWasSafe
+      const resolvedMistakeTag =
+        resolvedUserWasSafe === false
+          ? localEvaluation?.mistakeTag ?? normalizedResponse.mistakeTag
+          : null
       const resolvedUserVerdict =
         localEvaluation?.userVerdict ??
         (resolvedUserWasSafe === null
           ? 'Ответ принят. Для точной оценки укажите, что именно вы делаете: отказываетесь, проверяете источник или соглашаетесь.'
-          : data.userVerdict)
+          : normalizedResponse.userVerdict)
+      const nextPendingMistakeTags =
+        resolvedUserWasSafe === false && resolvedMistakeTag
+          ? Array.from(new Set([...chatPendingMistakeTags, resolvedMistakeTag]))
+          : chatPendingMistakeTags
 
       setChatMessages((previous) => [
         ...previous,
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: data.assistantReply,
+          content: normalizedResponse.assistantReply,
         },
       ])
 
       setChatInsight({
-        redFlags: data.redFlags,
-        coachNote: data.coachNote,
-        riskLevel: data.riskLevel,
-        conversationEnded: data.conversationEnded,
+        redFlags: normalizedResponse.redFlags,
+        techniques: normalizedResponse.techniques,
+        coachNote: normalizedResponse.coachNote,
+        riskLevel: normalizedResponse.riskLevel,
+        conversationEnded: normalizedResponse.conversationEnded,
         userVerdict: resolvedUserVerdict,
         userWasSafe: resolvedUserWasSafe,
         mistakeTag: resolvedMistakeTag,
-        simulatedCode: data.simulatedCode,
+        inputMode: resolvedInputMode,
+        simulatedCode: normalizedResponse.simulatedCode,
       })
+      setChatPendingMistakeTags(nextPendingMistakeTags)
 
       setProgress((previous) => ({
         ...previous,
         chatSessionsCount: previous.chatSessionsCount + (chatSessionCounted ? 0 : 1),
         mistakeTagsCount:
-          resolvedUserWasSafe !== false || !resolvedMistakeTag
+          !normalizedResponse.conversationEnded || chatMistakesCommitted
             ? previous.mistakeTagsCount
-            : buildMistakeCounts(previous.mistakeTagsCount, [resolvedMistakeTag]),
+            : buildMistakeCounts(previous.mistakeTagsCount, nextPendingMistakeTags),
         lastVisitedAt: new Date().toISOString(),
       }))
 
       if (!chatSessionCounted) {
         setChatSessionCounted(true)
+      }
+
+      if (normalizedResponse.conversationEnded && !chatMistakesCommitted) {
+        setChatMistakesCommitted(true)
       }
     } catch {
       setChatError(
@@ -522,11 +662,72 @@ function App() {
     }
   }
 
-  const renderMobileChatCoach = () => (
-    <aside className="coach-panel coach-panel--mobile">
+  const renderChatControls = (className?: string) => (
+    <div className={className ?? 'chat-toolbar'}>
+      <label>
+        Сценарий
+        <select value={chatScenarioHint} onChange={(event) => setChatScenarioHint(event.target.value)}>
+          {scenarioHints.map((hint) => (
+            <option key={hint} value={hint}>
+              {hint}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Сложность
+        <select value={chatDifficulty} onChange={(event) => setChatDifficulty(event.target.value)}>
+          {chatDifficulties.map((difficulty) => (
+            <option key={difficulty} value={difficulty}>
+              {difficulty}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <button className="ghost-button" onClick={resetChat} type="button">
+        Начать заново
+      </button>
+    </div>
+  )
+
+  const renderChatThread = (className?: string) => (
+    <div className={className ?? 'chat-thread'} aria-live="polite">
+      {chatMessages.map((message) => (
+        <div
+          className={`chat-bubble ${
+            message.role === 'assistant' ? 'chat-bubble--assistant' : 'chat-bubble--user'
+          }`}
+          key={message.id}
+        >
+          <span>{message.role === 'assistant' ? 'Собеседник' : 'Вы'}</span>
+          <p>{message.content}</p>
+        </div>
+      ))}
+
+      {isSending ? <div className="chat-thinking">Ответ обрабатывается…</div> : null}
+    </div>
+  )
+
+  const renderCodeNotice = (mobile = false) =>
+    chatInsight.simulatedCode ? (
+      <div className={`code-notice${mobile ? ' code-notice--mobile' : ''}`} role="status">
+        <span>Учебный код, который пытаются выманить</span>
+        <strong>{chatInsight.simulatedCode}</strong>
+      </div>
+    ) : null
+
+  const renderChatCoach = (className?: string) => (
+    <aside className={className ?? 'coach-panel'}>
       <div className="coach-risk">
         <span>Уровень риска</span>
         <strong>{riskTone}</strong>
+      </div>
+
+      <div className="response-meta">
+        <span>Формат ответа: {inputModeLabels[chatInsight.inputMode]}</span>
+        <span>Рисков в сцене: {chatPendingMistakeTags.length}</span>
       </div>
 
       <div className="coach-section">
@@ -538,6 +739,24 @@ function App() {
             </span>
           ))}
         </div>
+      </div>
+
+      <div className="coach-section">
+        <h3>Техники давления</h3>
+        {chatInsight.techniques.length ? (
+          <div className="technique-list">
+            {chatInsight.techniques.map((technique) => (
+              <div className="technique-item" key={technique.title}>
+                <strong>{technique.title}</strong>
+                <p>{technique.description}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="technique-empty">
+            После следующей реплики здесь появится список техник давления и их разбор.
+          </div>
+        )}
       </div>
 
       <div className="coach-section">
@@ -559,20 +778,41 @@ function App() {
         </div>
       </div>
 
-      {chatInsight.simulatedCode ? (
-        <div className="coach-section">
-          <h3>Учебный код</h3>
-          <div className="code-card">
-            <span>Пример кода, который могут пытаться выманить</span>
-            <strong>{chatInsight.simulatedCode}</strong>
-          </div>
-        </div>
-      ) : null}
+      {!className?.includes('coach-panel--mobile') ? renderCodeNotice() : null}
 
       {chatInsight.conversationEnded ? (
         <div className="chat-banner">Сцена завершена. Начните новый диалог или смените сценарий.</div>
       ) : null}
     </aside>
+  )
+
+  const renderChatComposer = (className?: string) => (
+    <form className={className ?? 'chat-form'} onSubmit={handleChatSubmit}>
+      <div className="chat-input-hint">
+        Можно писать свободно: как прямую реплику или как действие. Например: «Я сам перезвоню» или
+        «Кладу трубку и блокирую номер».
+      </div>
+      <textarea
+        rows={className?.includes('mobile') ? 2 : 3}
+        value={chatInput}
+        onChange={(event) => setChatInput(event.target.value)}
+        placeholder="Например: Кладу трубку, открываю приложение банка и сам проверяю операции."
+      />
+      {className?.includes('mobile') ? (
+        <div className="chat-form-actions">
+          <button className="ghost-button" onClick={resetChat} type="button">
+            Сброс
+          </button>
+          <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
+            Отправить
+          </button>
+        </div>
+      ) : (
+        <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
+          Отправить
+        </button>
+      )}
+    </form>
   )
 
   const renderMobileChat = () => (
@@ -582,28 +822,11 @@ function App() {
           <p className="section-label">Практика</p>
           <h2>Тренажер диалога</h2>
         </div>
-        <p className="section-note">Только учебные ответы. Без реальных кодов и данных.</p>
+        <p className="section-note">Только учебные ответы. Свободный ввод без префиксов, без реальных кодов и данных.</p>
       </div>
 
-      <div className="segmented" role="tablist" aria-label="Режим тренажера">
-        <button
-          className={chatTab === 'dialog' ? 'active' : ''}
-          onClick={() => setChatTab('dialog')}
-          type="button"
-          role="tab"
-          aria-selected={chatTab === 'dialog'}
-        >
-          Диалог
-        </button>
-        <button
-          className={chatTab === 'coach' ? 'active' : ''}
-          onClick={() => setChatTab('coach')}
-          type="button"
-          role="tab"
-          aria-selected={chatTab === 'coach'}
-        >
-          Разбор
-        </button>
+      <div className="chat-mobile-toolbar">
+        {renderChatControls('chat-toolbar chat-toolbar--mobile')}
       </div>
 
       {!apiUrl ? (
@@ -614,74 +837,10 @@ function App() {
 
       {chatError ? <div className="chat-banner chat-banner--error">{chatError}</div> : null}
 
-      {chatTab === 'coach' ? (
-        <>
-          <div className="chat-toolbar chat-toolbar--mobile">
-            <label>
-              Сценарий
-              <select value={chatScenarioHint} onChange={(event) => setChatScenarioHint(event.target.value)}>
-                {scenarioHints.map((hint) => (
-                  <option key={hint} value={hint}>
-                    {hint}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Сложность
-              <select value={chatDifficulty} onChange={(event) => setChatDifficulty(event.target.value)}>
-                {chatDifficulties.map((difficulty) => (
-                  <option key={difficulty} value={difficulty}>
-                    {difficulty}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button className="ghost-button" onClick={resetChat} type="button">
-              Начать заново
-            </button>
-          </div>
-
-          {renderMobileChatCoach()}
-        </>
-      ) : (
-        <>
-          <div className="chat-thread chat-thread--mobile" aria-live="polite">
-            {chatMessages.map((message) => (
-              <div
-                className={`chat-bubble ${
-                  message.role === 'assistant' ? 'chat-bubble--assistant' : 'chat-bubble--user'
-                }`}
-                key={message.id}
-              >
-                <span>{message.role === 'assistant' ? 'Собеседник' : 'Вы'}</span>
-                <p>{message.content}</p>
-              </div>
-            ))}
-
-            {isSending ? <div className="chat-thinking">Ответ обрабатывается…</div> : null}
-          </div>
-
-          <form className="chat-form chat-form--mobile" onSubmit={handleChatSubmit}>
-            <textarea
-              rows={2}
-              value={chatInput}
-              onChange={(event) => setChatInput(event.target.value)}
-              placeholder="Например: Я завершаю разговор и перезваниваю в банк по официальному номеру."
-            />
-            <div className="chat-form-actions">
-              <button className="ghost-button" onClick={resetChat} type="button">
-                Сброс
-              </button>
-              <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
-                Отправить
-              </button>
-            </div>
-          </form>
-        </>
-      )}
+      {renderCodeNotice(true)}
+      {renderChatThread('chat-thread chat-thread--mobile')}
+      {renderChatCoach('coach-panel coach-panel--mobile')}
+      {renderChatComposer('chat-form chat-form--mobile')}
     </section>
   )
 
@@ -812,6 +971,7 @@ function App() {
           <div className="brand">
             <img className="brand-mark" src="/logo.svg" alt="" aria-hidden="true" />
             <span className="brand-name">Мошенник.NET</span>
+            <span className="brand-hash">#КиберПраво</span>
           </div>
           <h1 className="mobile-title">Тренируйтесь распознавать мошеннические сценарии.</h1>
           <div className="mobile-metrics" aria-label="Ключевые метрики">
@@ -1044,6 +1204,7 @@ function App() {
           <div className="brand">
             <img className="brand-mark" src="/logo.svg" alt="" aria-hidden="true" />
             <span className="brand-name">Мошенник.NET</span>
+            <span className="brand-hash">#КиберПраво</span>
           </div>
           <h1>Распознавайте схему до того, как от вас попросят данные или деньги.</h1>
           <p className="hero-lead">
@@ -1106,36 +1267,13 @@ function App() {
               <p className="section-label">Практика в диалоге</p>
               <h2>Проверьте формулировки ответа под давлением</h2>
             </div>
-            <p className="section-note">Пишите только учебные ответы, без реальных кодов и персональных данных.</p>
+            <p className="section-note">
+              Пишите свободно: действием, репликой или смешанным ответом. Только учебные ответы, без реальных кодов и
+              персональных данных.
+            </p>
           </div>
 
-          <div className="chat-toolbar">
-            <label>
-              Сценарий
-              <select value={chatScenarioHint} onChange={(event) => setChatScenarioHint(event.target.value)}>
-                {scenarioHints.map((hint) => (
-                  <option key={hint} value={hint}>
-                    {hint}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Сложность
-              <select value={chatDifficulty} onChange={(event) => setChatDifficulty(event.target.value)}>
-                {chatDifficulties.map((difficulty) => (
-                  <option key={difficulty} value={difficulty}>
-                    {difficulty}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button className="ghost-button" onClick={resetChat} type="button">
-              Начать заново
-            </button>
-          </div>
+          {renderChatControls()}
 
           {!apiUrl ? (
             <div className="chat-banner">
@@ -1146,85 +1284,11 @@ function App() {
           {chatError ? <div className="chat-banner chat-banner--error">{chatError}</div> : null}
 
           <div className="chat-layout">
-            <aside className="coach-panel">
-              <div className="coach-risk">
-                <span>Уровень риска</span>
-                <strong>{riskTone}</strong>
-              </div>
-
-              <div className="coach-section">
-                <h3>Красные флаги</h3>
-                <div className="red-flag-row">
-                  {chatInsight.redFlags.map((flag) => (
-                    <span className="red-flag-pill" key={flag}>
-                      {flag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="coach-section">
-                <h3>Разбор</h3>
-                <p>{chatInsight.coachNote}</p>
-              </div>
-
-              <div className="coach-section">
-                <h3>Оценка реакции</h3>
-                <div className={verdictTone}>
-                  <strong>
-                    {chatInsight.userWasSafe === null
-                      ? 'Нужна более точная формулировка'
-                      : chatInsight.userWasSafe
-                        ? 'Реакция безопасная'
-                        : 'Реакция рискованная'}
-                  </strong>
-                  <p>{chatInsight.userVerdict}</p>
-                </div>
-              </div>
-
-              {chatInsight.simulatedCode ? (
-                <div className="coach-section">
-                  <h3>Учебный код</h3>
-                  <div className="code-card">
-                    <span>Пример кода, который могут пытаться выманить</span>
-                    <strong>{chatInsight.simulatedCode}</strong>
-                  </div>
-                </div>
-              ) : null}
-
-              {chatInsight.conversationEnded ? (
-                <div className="chat-banner">Сцена завершена. Начните новый диалог или смените сценарий.</div>
-              ) : null}
-            </aside>
-
-            <div className="chat-thread" aria-live="polite">
-              {chatMessages.map((message) => (
-                <div
-                  className={`chat-bubble ${
-                    message.role === 'assistant' ? 'chat-bubble--assistant' : 'chat-bubble--user'
-                  }`}
-                  key={message.id}
-                >
-                  <span>{message.role === 'assistant' ? 'Собеседник' : 'Вы'}</span>
-                  <p>{message.content}</p>
-                </div>
-              ))}
-
-              {isSending ? <div className="chat-thinking">Ответ обрабатывается…</div> : null}
-            </div>
+            {renderChatCoach()}
+            {renderChatThread()}
           </div>
 
-          <form className="chat-form" onSubmit={handleChatSubmit}>
-            <textarea
-              rows={3}
-              value={chatInput}
-              onChange={(event) => setChatInput(event.target.value)}
-              placeholder="Например: Я завершаю разговор и перезваниваю в банк по официальному номеру."
-            />
-            <button className="primary-button" disabled={isSending || chatInsight.conversationEnded} type="submit">
-              Отправить
-            </button>
-          </form>
+          {renderChatComposer()}
         </section>
 
         <section className="panel panel-wide" id="cases">

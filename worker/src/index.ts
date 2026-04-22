@@ -17,22 +17,32 @@ type ChatRequest = {
   userMessage: string
 }
 
+type ChatInputMode = 'speech' | 'action' | 'mixed' | 'unclear'
+
+type ChatTechnique = {
+  title: string
+  description: string
+}
+
 type ChatResponse = {
   assistantReply: string
   redFlags: string[]
+  techniques: ChatTechnique[]
   coachNote: string
   riskLevel: 'low' | 'medium' | 'high'
   conversationEnded: boolean
   userVerdict: string
   userWasSafe: boolean | null
   mistakeTag: string | null
+  inputMode: ChatInputMode
   asksForCode: boolean
 }
 
 type UserReplyEvaluation = {
-  userWasSafe: boolean
+  userWasSafe: boolean | null
   userVerdict: string
   mistakeTag: string | null
+  inputMode: ChatInputMode
 }
 
 const json = (data: unknown, status: number, headers: Record<string, string> = {}) =>
@@ -85,36 +95,94 @@ const generateTrainingCode = () =>
 const normalizeMessage = (message: string) => message.toLowerCase().replace(/\s+/g, ' ').trim()
 
 const safePatterns = [
-  /не\s+(буду|стану|собираюсь)\s+(говорить|диктовать|сообщать|называть|отправлять|вводить)/,
-  /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/,
-  /сам\s+(перезвоню|позвоню|проверю)/,
-  /проверю\s+(в|через|по)/,
-  /не\s+перейду\s+по\s+ссылке/,
-  /не\s+буду\s+переводить/,
-  /заверш(у|ить)\s+(звонок|разговор|диалог)/,
-  /прекращ(аю|у)\s+(разговор|общение)/,
-  /блокирую\s+(номер|контакт)/,
-  /отказываюсь/,
-  /откажусь/,
+  /не\s+(буду|стану|собираюсь)\s+(говорить|диктовать|сообщать|называть|отправлять|вводить)/i,
+  /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/i,
+  /сам\s+(перезвоню|позвоню|проверю)/i,
+  /проверю\s+(в|через|по)/i,
+  /не\s+перейду\s+по\s+ссылке/i,
+  /не\s+буду\s+переводить/i,
+  /заверш(у|ить|аю)\s+(звонок|разговор|диалог)/i,
+  /прекращ(аю|у)\s+(разговор|общение)/i,
+  /блокирую\s+(номер|контакт)/i,
+  /кладу\s+трубку/i,
+  /отказываюсь/i,
+  /откажусь/i,
 ]
 
 const negatedRiskPatterns = [
-  /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/,
-  /не\s+(переведу|перевожу|буду\s+переводить)/,
-  /не\s+(перейду|открою)\s+(по\s+)?(ссылке|сайт)/,
-  /не\s+(подтвержу|выполню|продолжу)/,
+  /не\s+(скажу|назову|сообщу|продиктую|отправлю|введу)/i,
+  /не\s+(переведу|перевожу|буду\s+переводить)/i,
+  /не\s+(перейду|открою)\s+(по\s+)?(ссылке|сайт)/i,
+  /не\s+(подтвержу|выполню|продолжу)/i,
 ]
 
-const unsafeSignals = [
-  { pattern: /(скажу|назову|сообщу|продиктую|отправлю|введу).{0,28}(код|смс|парол|данн)/, tag: 'код-подтверждения' },
-  { pattern: /(переведу|перевожу|отправлю).{0,28}(деньг|сумм|оплат)/, tag: 'перевод-денег' },
-  { pattern: /(перейду|открою).{0,24}(ссылк|сайт)/, tag: 'переход-по-ссылке' },
-  { pattern: /(сообщу|скажу|отправлю|введу).{0,24}(карт|cvv|паспорт|данн)/, tag: 'передача-данных' },
-  { pattern: /(подтвержу|выполню|продолжу).{0,28}(операц|шаг|инструкц)/, tag: 'доверие-сценарию' },
+const riskySignals = [
+  {
+    pattern: /(скажу|назову|сообщу|продиктую|отправлю|введу).{0,28}(код|смс|парол|данн)/i,
+    tag: 'код-подтверждения',
+  },
+  {
+    pattern: /(переведу|перевожу|отправлю).{0,28}(деньг|сумм|оплат)/i,
+    tag: 'перевод-денег',
+  },
+  {
+    pattern: /(перейду|открою).{0,24}(ссылк|сайт)/i,
+    tag: 'переход-по-ссылке',
+  },
+  {
+    pattern: /(сообщу|скажу|отправлю|введу).{0,24}(карт|cvv|паспорт|данн)/i,
+    tag: 'передача-данных',
+  },
+  {
+    pattern: /(подтвержу|выполню|продолжу).{0,28}(операц|шаг|инструкц)/i,
+    tag: 'доверие-сценарию',
+  },
 ]
+
+const actionMarkers = [
+  /\b(перезвоню|позвоню|проверю|завершу|завершаю|прекращаю|кладу трубку|блокирую|переведу|перевожу|перейду|открою|введу|диктую|продиктую|подтвержу|выполню|продолжу)\b/i,
+  /\b(отправлю|сообщу)\b.{0,24}\b(код|смс|данные|деньги|карту|cvv)\b/i,
+]
+
+const speechMarkers = [
+  /^[«"]/,
+  /[?!]$/,
+  /\b(скажу|отвечу|отвечаю|говорю|спрошу|напишу|пишу)\b/i,
+  /^(нет|кто вы|зачем|почему|с какой стати|подождите)/i,
+]
+
+const delayOrQuestionPatterns = [
+  /\b(подождите|секунду|подумаю|уточню|проверю сначала)\b/i,
+  /\?/,
+]
+
+const detectInputMode = (userMessage: string): ChatInputMode => {
+  const normalized = normalizeMessage(userMessage)
+  if (!normalized) {
+    return 'unclear'
+  }
+
+  const hasAction = actionMarkers.some((pattern) => pattern.test(normalized))
+  const hasSpeech = speechMarkers.some((pattern) => pattern.test(userMessage.trim()))
+
+  if (hasAction && hasSpeech) {
+    return 'mixed'
+  }
+
+  if (hasAction) {
+    return 'action'
+  }
+
+  if (hasSpeech) {
+    return 'speech'
+  }
+
+  return 'unclear'
+}
 
 const evaluateUserReplyHeuristically = (userMessage: string): UserReplyEvaluation | null => {
   const normalized = normalizeMessage(userMessage)
+  const inputMode = detectInputMode(userMessage)
 
   if (!normalized) {
     return null
@@ -124,8 +192,9 @@ const evaluateUserReplyHeuristically = (userMessage: string): UserReplyEvaluatio
     return {
       userWasSafe: true,
       userVerdict:
-        'Безопасная реакция: вы не приняли правила мошенника и перевели проверку в независимый канал.',
+        'Безопасная реакция: вы оборвали давление, отказались от опасного шага и перевели проверку в независимый канал.',
       mistakeTag: null,
+      inputMode,
     }
   }
 
@@ -133,17 +202,30 @@ const evaluateUserReplyHeuristically = (userMessage: string): UserReplyEvaluatio
     return {
       userWasSafe: true,
       userVerdict:
-        'Ответ выглядит осторожным: вы отказываетесь от рискованных действий и удерживаете контроль.',
+        'Ответ выглядит осторожным: вы прямо отказались от рискованного действия и не приняли правила мошенника.',
       mistakeTag: null,
+      inputMode,
     }
   }
 
-  const unsafeMatch = unsafeSignals.find(({ pattern }) => pattern.test(normalized))
+  const unsafeMatch = riskySignals.find(({ pattern }) => pattern.test(normalized))
   if (unsafeMatch) {
     return {
       userWasSafe: false,
-      userVerdict: 'Рискованный ответ: вы начали действовать по сценарию мошенника вместо независимой проверки.',
+      userVerdict:
+        'Рискованный ответ: вы явно соглашаетесь на действие в интересах мошенника, а не на самостоятельную проверку.',
       mistakeTag: unsafeMatch.tag,
+      inputMode,
+    }
+  }
+
+  if (delayOrQuestionPatterns.some((pattern) => pattern.test(normalized))) {
+    return {
+      userWasSafe: null,
+      userVerdict:
+        'Пока это выглядит как вопрос, пауза или сомнение. Ошибка не засчитывается, пока вы не совершили рискованный шаг.',
+      mistakeTag: null,
+      inputMode,
     }
   }
 
@@ -166,7 +248,53 @@ const extractJson = (content: string) => {
   return trimmed
 }
 
-const detectCodeRequest = (assistantReply: string) => /(код|смс|sms|одноразов|парол)/i.test(assistantReply)
+const detectCodeRequest = (assistantReply: string) =>
+  /(код|смс|sms|одноразов|парол|подтверждени)/i.test(assistantReply)
+
+const normalizeTechniques = (value: unknown): ChatTechnique[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null
+      }
+
+      const entry = item as Partial<ChatTechnique>
+      if (typeof entry.title !== 'string' || typeof entry.description !== 'string') {
+        return null
+      }
+
+      return {
+        title: entry.title.trim().slice(0, 80),
+        description: entry.description.trim().slice(0, 220),
+      }
+    })
+    .filter((item): item is ChatTechnique => Boolean(item))
+    .slice(0, 4)
+}
+
+const normalizeRedFlags = (value: unknown) => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 5)
+}
+
+const normalizeInputMode = (value: unknown): ChatInputMode => {
+  if (value === 'speech' || value === 'action' || value === 'mixed' || value === 'unclear') {
+    return value
+  }
+
+  return 'unclear'
+}
 
 const normalizeModelResponse = (raw: unknown): ChatResponse | null => {
   if (!raw || typeof raw !== 'object') {
@@ -185,64 +313,79 @@ const normalizeModelResponse = (raw: unknown): ChatResponse | null => {
 
   return {
     assistantReply: data.assistantReply.trim(),
-    redFlags: Array.isArray(data.redFlags)
-      ? data.redFlags.filter((item): item is string => typeof item === 'string').slice(0, 5)
-      : [],
+    redFlags: normalizeRedFlags(data.redFlags),
+    techniques: normalizeTechniques(data.techniques),
     coachNote: data.coachNote.trim(),
     riskLevel,
     conversationEnded: Boolean(data.conversationEnded),
     userVerdict:
-      typeof data.userVerdict === 'string'
+      typeof data.userVerdict === 'string' && data.userVerdict.trim()
         ? data.userVerdict.trim()
-        : 'Оценка требует более конкретной реплики пользователя.',
+        : 'Оценка требует более конкретной формулировки ответа пользователя.',
     userWasSafe: typeof data.userWasSafe === 'boolean' ? data.userWasSafe : null,
     mistakeTag: typeof data.mistakeTag === 'string' ? data.mistakeTag.trim().slice(0, 60) : null,
+    inputMode: normalizeInputMode(data.inputMode),
     asksForCode: Boolean(data.asksForCode),
   }
 }
 
-const systemPrompt = `Ты ведешь русскоязычную образовательную симуляцию по распознаванию мошенничества.
+const systemPrompt = `Ты ведешь русскоязычную учебную симуляцию по распознаванию мошенничества.
 
-Главная роль:
-- Ты играешь убедительного мошенника в учебной сцене.
-- Ты не помощник, не консультант и не нейтральный собеседник.
-- Твоя задача в assistantReply: продавить пользователя на рискованное действие через срочность, давление, авторитет, жалость, выгоду или запрет на проверку.
+Роль и стиль:
+- Ты играешь убедительного мошенника внутри учебной сцены.
+- В assistantReply ты всегда пишешь только следующую реплику мошенника: без объяснений, без мета-комментариев, без упоминания правил и без выхода из роли.
+- Ты не помощник, не консультант и не нейтральный оператор.
+- Говори коротко, дави уверенно и приземленно, как реальный злоумышленник.
+- Усиливай давление через срочность, авторитет, страх потери, жалость, выгоду и запрет на независимую проверку.
+- Если пользователь сопротивляется, меняй тактику давления, но не меняй сценарий.
+- Не уходи в общие вежливые вопросы и не предлагай безопасные решения.
 
-Поведение мошенника:
-- Всегда отвечай только по-русски.
-- Держись только выбранного сценария и не меняй тему.
-- Говори коротко, уверенно и напористо.
-- Используй реалистичные формулировки мошенника: "нужно срочно", "у нас мало времени", "операция уже в обработке", "не кладите трубку", "иначе доступ будет ограничен".
-- Не задавай вежливые общие вопросы вроде "я задам вам пару вопросов", "чем могу помочь", "уточните, что вам нужно".
-- Не звучь как ИИ, оператор поддержки, психолог или преподаватель.
-- Если пользователь сопротивляется, усиливай давление и меняй тактику, а не выходи из роли.
-- Если пользователь хочет проверить информацию, старайся помешать проверке: запрещай класть трубку, предлагай решить все прямо сейчас, ссылайся на срочность или регламент.
+Оценка ответа пользователя:
+- Определяй inputMode:
+  - speech: пользователь пишет, что именно говорит мошеннику.
+  - action: пользователь описывает действие или следующий шаг.
+  - mixed: в одном сообщении есть и действие, и реплика.
+  - unclear: формулировка слишком размыта.
+- Ошибку можно засчитывать только если пользователь явно совершает рискованный шаг или прямо соглашается его совершить.
+- Если пользователь только спрашивает, сомневается, тянет время, ругается, требует доказательства или пишет слишком общо, это не ошибка: userWasSafe=null и mistakeTag=null.
+- userWasSafe=true только если пользователь явно отказывается, завершает контакт, не передает данные, не переходит по ссылке, не переводит деньги и переводит проверку в независимый канал.
+- userWasSafe=false только если пользователь явно сообщает код, данные, переводит деньги, переходит по ссылке, подтверждает операцию или продолжает действовать по сценарию мошенника.
+- mistakeTag заполняй только при userWasSafe=false коротким тегом вроде "код-подтверждения", "перевод-денег", "переход-по-ссылке", "передача-данных", "доверие-сценарию".
+- Если userWasSafe=true или userWasSafe=null, mistakeTag должен быть null.
+
+Разбор:
+- redFlags: короткие маркеры того, что выдает мошенника в твоей текущей реплике.
+- techniques: список приемов давления. Каждый элемент должен содержать title и description.
+- coachNote: развернутый разбор на 2-3 предложения. Назови техники давления и объясни, как именно они работают в этой реплике.
 
 Ограничения безопасности:
-- После каждой реплики отдельно анализируй, чем твое поведение выдает мошенника.
-- Не используй реальные банки, адреса, телефоны и настоящие персональные данные.
-- Не требуй от пользователя вводить реальные чувствительные данные. Вместо этого используй нейтральные формулировки вроде "код из сообщения", "данные карты", "подтверждение операции".
-- Если пользователь пытается отправить реальные данные, мягко останови его и верни разговор в учебный режим, но не ломай стиль сцены.
+- Не используй реальные банки, компании, адреса, телефоны и персональные данные.
+- Не проси пользователя вводить реальные чувствительные данные. Используй нейтральные формулировки вроде "код из сообщения", "данные карты", "подтверждение операции".
+- Если пользователь начинает писать что-то похожее на реальные данные, не повторяй эти данные в ответе.
 
-Формат assistantReply:
-- Это только реплика мошенника, без объяснений, без мета-комментариев, без упоминания правил.
-- Реплика должна быть естественной, напористой и похожей на реальный развод.
+Финал сцены:
+- conversationEnded=true, если пользователь явно завершил контакт безопасно или уже явно совершил ключевой рискованный шаг и сцену можно естественно закончить.
+- asksForCode=true, если в assistantReply мошенник просит код из SMS, push, одноразовый пароль или аналогичный код.
 
-Верни ТОЛЬКО JSON-объект без markdown и без дополнительного текста:
+Верни только JSON-объект без markdown и без дополнительного текста:
 {
   "assistantReply": "реплика мошенника",
   "redFlags": ["короткий признак 1", "короткий признак 2"],
-  "coachNote": "краткий разбор, почему это подозрительно и как действовать безопасно",
-  "userVerdict": "одно короткое предложение о реакции пользователя",
+  "techniques": [
+    {
+      "title": "название техники",
+      "description": "как именно эта техника работает в текущей реплике"
+    }
+  ],
+  "coachNote": "развернутый разбор, почему реплика опасна и как она давит на пользователя",
+  "userVerdict": "краткая оценка реакции пользователя",
   "userWasSafe": true,
-  "mistakeTag": "короткий тег ошибки или null",
+  "mistakeTag": null,
+  "inputMode": "speech",
   "asksForCode": false,
-  "riskLevel": "low | medium | high",
+  "riskLevel": "low",
   "conversationEnded": false
-}
-
-Если оценка неочевидна, ставь userWasSafe=null и mistakeTag=null.
-Если учебная сцена достигла цели, поставь conversationEnded=true и закончи реплику естественно.`
+}`
 
 const createUserPrompt = (request: ChatRequest) => `Контекст тренировки:
 - Сценарий: ${request.scenarioHint}
@@ -255,16 +398,12 @@ ${request.history.map((message) => `${message.role}: ${message.content}`).join('
 Новое сообщение пользователя:
 user: ${request.userMessage}
 
-Сформируй следующую реплику мошенника строго в рамках этого сценария и отдельный разбор. Не меняй тему сцены. Мошенник должен звучать убедительно, настойчиво и приземленно, а не как ИИ-помощник.
-
-Правила оценки ответа пользователя:
-- userVerdict должен быть коротким и прямым: безопасная или рискованная реакция, и почему.
-- userWasSafe=true, если пользователь отказался сообщать код/данные, решил проверить источник, прекратить диалог или не переводить деньги.
-- userWasSafe=false, если пользователь собирается продолжать разговор на условиях мошенника, сообщать код, данные карты, переводить деньги, переходить по ссылке или выполнять навязанные шаги.
-- userWasSafe=null, если формулировка слишком общая и сделать вывод нельзя.
-- если userWasSafe=false, укажи mistakeTag коротким тегом вроде "код-подтверждения", "доверие-сценарию", "переход-по-ссылке", "перевод-денег";
-- если userWasSafe=true или userWasSafe=null, верни mistakeTag=null.
-- asksForCode=true, если в assistantReply мошенник требует код из смс, код подтверждения, одноразовый пароль или аналогичный числовой код.`
+Сформируй следующую реплику мошенника строго внутри этого сценария и отдельно оцени ответ пользователя по правилам из system prompt.
+Помни:
+- не засчитывай ошибку за сам факт сообщения;
+- засчитывай ее только при явном опасном действии или прямом согласии на него;
+- вопрос, сомнение, торг, ругань, затягивание времени или слишком общая фраза не являются ошибкой;
+- inputMode обязан описывать, написал ли пользователь реплику, действие, смешанный ответ или неясный ответ.`
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -330,8 +469,8 @@ export default {
       },
       body: JSON.stringify({
         model: env.GROQ_MODEL || 'llama-3.1-8b-instant',
-        temperature: 0.45,
-        max_tokens: 700,
+        temperature: 0.55,
+        max_tokens: 900,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: createUserPrompt(sanitizedRequest) },
@@ -371,19 +510,27 @@ export default {
       return json({ error: 'invalid-model-schema' }, 502, corsHeaders)
     }
 
-    const heuristicEvaluation = evaluateUserReplyHeuristically(sanitizedRequest.userMessage)
+    const heuristicEvaluation =
+      normalized.userWasSafe === null ? evaluateUserReplyHeuristically(sanitizedRequest.userMessage) : null
+
+    const resolvedInputMode =
+      normalized.inputMode === 'unclear'
+        ? heuristicEvaluation?.inputMode ?? normalized.inputMode
+        : normalized.inputMode
     const resolvedUserWasSafe = heuristicEvaluation?.userWasSafe ?? normalized.userWasSafe
-    const resolvedMistakeTag = heuristicEvaluation?.mistakeTag ?? normalized.mistakeTag
+    const resolvedMistakeTag =
+      resolvedUserWasSafe === false ? heuristicEvaluation?.mistakeTag ?? normalized.mistakeTag : null
 
     return json(
       {
         ...normalized,
+        inputMode: resolvedInputMode,
         userWasSafe: resolvedUserWasSafe,
         userVerdict:
           heuristicEvaluation?.userVerdict ??
           normalized.userVerdict ??
           'Оценка требует более конкретной формулировки ответа.',
-        mistakeTag: resolvedUserWasSafe === false ? resolvedMistakeTag : null,
+        mistakeTag: resolvedMistakeTag,
         simulatedCode:
           normalized.asksForCode || detectCodeRequest(normalized.assistantReply)
             ? generateTrainingCode()

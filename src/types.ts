@@ -1,9 +1,15 @@
-﻿export type DangerLevel = 'low' | 'medium' | 'high'
+export type DangerLevel = 'low' | 'medium' | 'high'
+export type ChatInputMode = 'speech' | 'action' | 'mixed' | 'unclear'
 
 export type RecognitionCard = {
   title: string
   body: string
   cue: string
+}
+
+export type ChatTechnique = {
+  title: string
+  description: string
 }
 
 export type ScenarioChoice = {
@@ -60,12 +66,14 @@ export type ChatMessage = {
 
 export type ChatInsight = {
   redFlags: string[]
+  techniques: ChatTechnique[]
   coachNote: string
   riskLevel: DangerLevel
   conversationEnded: boolean
   userVerdict: string
   userWasSafe: boolean | null
   mistakeTag: string | null
+  inputMode: ChatInputMode
   simulatedCode: string | null
 }
 
@@ -80,11 +88,13 @@ export type ChatApiRequest = {
 export type ChatApiResponse = {
   assistantReply: string
   redFlags: string[]
+  techniques: ChatTechnique[]
   coachNote: string
   riskLevel: DangerLevel
   conversationEnded: boolean
   userVerdict: string
   userWasSafe: boolean | null
   mistakeTag: string | null
+  inputMode: ChatInputMode
   simulatedCode: string | null
 }
